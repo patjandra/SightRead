@@ -66,6 +66,7 @@ export default function App() {
     startTracking: startCamera,
     stopTracking: stopCamera,
     CONFIDENCE_THRESHOLD,
+    landmarksRef,
   } = useGazeTracking();
 
   const [isTracking, setIsTracking] = useState(false);
@@ -131,15 +132,51 @@ export default function App() {
   });
 
   // ── Tracking warning ───────────────────────────────────────────────────────
-  const showWarning =
+  // Tracking is "bad" whenever there's no usable gaze (no face, poor framing,
+  // blink, etc.). We debounce showing the warning so transient drops like blinks
+  // don't flash it, while sustained problems (off-center, too far) surface with
+  // the estimator's actionable hint.
+  const trackingBad =
     isTracking &&
     (!gazeData.hasFace || gazeData.confidence < CONFIDENCE_THRESHOLD);
 
+  const [showWarning, setShowWarning] = useState(false);
+  const warningTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (trackingBad) {
+      if (!warningTimerRef.current) {
+        warningTimerRef.current = setTimeout(() => setShowWarning(true), 600);
+      }
+    } else {
+      clearTimeout(warningTimerRef.current);
+      warningTimerRef.current = null;
+      setShowWarning(false);
+    }
+    return () => clearTimeout(warningTimerRef.current);
+  }, [trackingBad]);
+
+  // The specific reason to show once the warning is visible (framing hint, or a
+  // generic fallback for a plain lost-face).
+  const warningMessage = gazeData.hint || "Tracking lost. Recenter your face.";
+
+  // Face is well-framed when there's no actionable hint (framing / no-face).
+  const framingOk = !gazeData.hint;
+
   // ── Debug values ───────────────────────────────────────────────────────────
+  const confidentGaze =
+    gazeData.hasFace && gazeData.confidence >= CONFIDENCE_THRESHOLD;
+
   const debugRawY = gazeData.hasFace ? gazeData.rawY : null;
-  const debugCalibratedY = isProfileCalibrated(selectedProfile)
+  // Only map a real, confident reading. Without one, rest at neutral (0.5)
+  // instead of mapping the placeholder rawY, which can land in the "up" band
+  // depending on calibration — matching the scroll controller, which pauses
+  // (neutral) whenever the gaze isn't confident.
+  const debugCalibratedY = !isProfileCalibrated(selectedProfile)
+    ? null
+    : confidentGaze
     ? mapRawToCalibratedY(gazeData.rawY, selectedProfile)
-    : null;
+    : 0.5;
 
   return (
     <div className="h-screen flex flex-col bg-gray-900 overflow-hidden">
@@ -153,7 +190,7 @@ export default function App() {
         playsInline
       />
 
-      <TrackingWarning show={showWarning} />
+      <TrackingWarning show={showWarning} message={warningMessage} />
 
       {isCalibrating && (
         <CalibrationScreen
@@ -190,6 +227,8 @@ export default function App() {
           mediapipeReady={mediapipeReady}
           mediapipeError={mediapipeError}
           cameraActive={cameraShouldBeOn}
+          landmarksRef={landmarksRef}
+          framingOk={framingOk}
         />
 
         <PDFViewer

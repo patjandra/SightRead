@@ -23,6 +23,7 @@ export function useGazeTracking() {
     rawY: 0.5,
     confidence: 0,
     hasFace: false,
+    hint: null,
   });
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState(null);
@@ -32,6 +33,10 @@ export function useGazeTracking() {
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const runningRef = useRef(false);
+
+  // Latest raw face mesh (faceLandmarks[0]) for live preview rendering. Kept in
+  // a ref, not state, so the ~30-60fps updates don't trigger React re-renders.
+  const landmarksRef = useRef(null);
 
   // Initialize MediaPipe on mount
   useEffect(() => {
@@ -108,7 +113,8 @@ export function useGazeTracking() {
       videoRef.current.srcObject = null;
     }
 
-    setGazeData({ rawY: 0.5, confidence: 0, hasFace: false });
+    landmarksRef.current = null;
+    setGazeData({ rawY: 0.5, confidence: 0, hasFace: false, hint: null });
   }, []);
 
   const startTracking = useCallback(async () => {
@@ -162,6 +168,7 @@ export function useGazeTracking() {
             video,
             performance.now()
           );
+          landmarksRef.current = result?.faceLandmarks?.[0] ?? null;
           const gaze = estimateGaze(result);
           setGazeData(gaze);
         } catch (err) {
@@ -183,5 +190,6 @@ export function useGazeTracking() {
     startTracking,
     stopTracking,
     CONFIDENCE_THRESHOLD,
+    landmarksRef,
   };
 }

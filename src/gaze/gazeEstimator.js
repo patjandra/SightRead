@@ -1,5 +1,6 @@
 /**
- * Vertical gaze estimator using MediaPipe eye blendshapes.
+ * Vertical gaze estimator using MediaPipe eye blendshapes, plus a framing check
+ * that only trusts the reading when the face is well-positioned for the camera.
  *
  * Why blendshapes instead of iris-vs-corner geometry:
  *   The previous approach measured the iris center's Y offset from the eye
@@ -31,19 +32,82 @@ const AMPLIFICATION = 1.6;
 // scrolling pauses (mirrors the old EAR-based blink guard).
 const BLINK_THRESHOLD = 0.5;
 
+// ─── Framing thresholds (all in normalized [0,1] image coordinates) ──────────
+// The blendshapes only track accurately when the whole face is comfortably
+// inside the frame at a reasonable distance. Outside these bounds we pause and
+// tell the user how to reposition instead of scrolling on a bad reading.
+const FRAME_EDGE_MARGIN = 0.03; // landmarks this close to an edge = cut off
+const MIN_FACE_HEIGHT   = 0.22; // face shorter than this = too far away
+const MAX_FACE_HEIGHT   = 0.90; // face taller than this  = too close
+const CENTER_X_MIN = 0.30;
+const CENTER_X_MAX = 0.70;
+const CENTER_Y_MIN = 0.28;
+const CENTER_Y_MAX = 0.72;
+
+/**
+ * Assess how well the face is framed for tracking.
+ *
+ * @param {Array<{x:number,y:number}>} lm - face landmarks
+ * @returns {string|null} an actionable hint, or null when framing is good
+ */
+function assessFraming(lm) {
+  let minX = 1, minY = 1, maxX = 0, maxY = 0;
+  for (const p of lm) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+
+  // Any part of the face cut off by the frame edge → unreliable landmarks.
+  if (
+    minX < FRAME_EDGE_MARGIN ||
+    maxX > 1 - FRAME_EDGE_MARGIN ||
+    minY < FRAME_EDGE_MARGIN ||
+    maxY > 1 - FRAME_EDGE_MARGIN
+  ) {
+    return "Keep your whole face in view";
+  }
+
+  const faceHeight = maxY - minY;
+  if (faceHeight < MIN_FACE_HEIGHT) return "Move closer to the camera";
+  if (faceHeight > MAX_FACE_HEIGHT) return "Move back from the camera";
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  if (
+    centerX < CENTER_X_MIN ||
+    centerX > CENTER_X_MAX ||
+    centerY < CENTER_Y_MIN ||
+    centerY > CENTER_Y_MAX
+  ) {
+    return "Center your face in the camera";
+  }
+
+  return null;
+}
+
 /**
  * @param {object|null} result - detectForVideo result from FaceLandmarker
- * @returns {{ rawY: number, confidence: number, hasFace: boolean }}
+ * @returns {{ rawY: number, confidence: number, hasFace: boolean, hint: string|null }}
  */
 export function estimateGaze(result) {
-  if (!result?.faceLandmarks?.length) {
-    return { rawY: 0.5, confidence: 0, hasFace: false };
+  const lm = result?.faceLandmarks?.[0];
+  if (!lm?.length) {
+    return { rawY: 0.5, confidence: 0, hasFace: false, hint: "No face detected" };
+  }
+
+  // Framing gate: if the face isn't well-positioned, pause and say how to fix
+  // it rather than scrolling on an inaccurate reading.
+  const framingHint = assessFraming(lm);
+  if (framingHint) {
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: framingHint };
   }
 
   const categories = result?.faceBlendshapes?.[0]?.categories;
   if (!categories?.length) {
     // Face detected but blendshapes unavailable — can't estimate gaze.
-    return { rawY: 0.5, confidence: 0, hasFace: true };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
   }
 
   // Build a name→score lookup once; blendshape order isn't guaranteed.
@@ -51,10 +115,11 @@ export function estimateGaze(result) {
   for (const c of categories) score[c.categoryName] = c.score;
   const get = (name) => score[name] ?? 0;
 
-  // Closed eyes (blink or squint) make the gaze reading meaningless.
+  // Closed eyes (blink or squint) make the gaze reading meaningless. This is a
+  // normal, transient state, so no hint — just pause.
   const blink = Math.max(get("eyeBlinkLeft"), get("eyeBlinkRight"));
   if (blink > BLINK_THRESHOLD) {
-    return { rawY: 0.5, confidence: 0, hasFace: true };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
   }
 
   const lookUp   = (get("eyeLookUpLeft")   + get("eyeLookUpRight"))   / 2;
@@ -66,8 +131,13 @@ export function estimateGaze(result) {
   const rawY = 0.5 + vertical * 0.5 * AMPLIFICATION;
 
   if (!isFinite(rawY) || isNaN(rawY)) {
-    return { rawY: 0.5, confidence: 0, hasFace: true };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
   }
 
-  return { rawY: Math.min(1, Math.max(0, rawY)), confidence: 1, hasFace: true };
+  return {
+    rawY: Math.min(1, Math.max(0, rawY)),
+    confidence: 1,
+    hasFace: true,
+    hint: null,
+  };
 }

@@ -1,5 +1,6 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import ProfileSelector from "./ProfileSelector.jsx";
+import FacePreview from "./FacePreview.jsx";
 import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../config.js";
 import {
   isProfileCalibrated,
@@ -16,6 +17,25 @@ function sliderToSensitivity(v) {
 
 function sensitivityToSlider(s) {
   return Math.log(s / 0.10) / LOG_RANGE;
+}
+
+function HamburgerIcon({ size = 18 }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </svg>
+  );
 }
 
 export default function ControlPanel({
@@ -53,8 +73,11 @@ export default function ControlPanel({
   mediapipeReady,
   mediapipeError,
   cameraActive,
+  landmarksRef,
+  framingOk,
 }) {
   const fileInputRef = useRef(null);
+  const [showFaceView, setShowFaceView] = useState(true);
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -74,10 +97,11 @@ export default function ControlPanel({
       <div className="w-8 flex-shrink-0 bg-gray-800 flex flex-col items-center pt-3 gap-3 border-r border-gray-700">
         <button
           onClick={onTogglePanel}
-          className="text-gray-400 hover:text-white text-xs px-1"
+          className="text-gray-400 hover:text-white flex items-center justify-center"
           title="Expand panel"
+          aria-label="Expand panel"
         >
-          ▶
+          <HamburgerIcon />
         </button>
         <span
           className="text-gray-600 text-xs font-bold select-none"
@@ -100,10 +124,11 @@ export default function ControlPanel({
         </div>
         <button
           onClick={onTogglePanel}
-          className="text-gray-500 hover:text-white text-xs mt-1 ml-1 flex-shrink-0"
+          className="text-gray-500 hover:text-white mt-1 ml-1 flex-shrink-0 flex items-center justify-center"
           title="Collapse panel"
+          aria-label="Collapse panel"
         >
-          ◀
+          <HamburgerIcon />
         </button>
       </div>
 
@@ -264,6 +289,42 @@ export default function ControlPanel({
             +
           </button>
         </div>
+      </section>
+
+      {/* Face preview — shows what the camera sees and how you're framed */}
+      <section>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-semibold uppercase text-gray-400">
+            Face view
+          </p>
+          <button
+            onClick={() => setShowFaceView((v) => !v)}
+            role="switch"
+            aria-checked={showFaceView}
+            title={showFaceView ? "Hide face view" : "Show face view"}
+            className={`relative w-9 h-5 rounded-full transition-colors ${
+              showFaceView ? "bg-green-600" : "bg-gray-600"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                showFaceView ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+        {showFaceView && (
+          <>
+            <FacePreview
+              landmarksRef={landmarksRef}
+              active={cameraActive}
+              framingOk={framingOk}
+            />
+            <p className="text-xs text-gray-600 mt-1">
+              Keep your face inside the guide.
+            </p>
+          </>
+        )}
       </section>
 
       {/* Debug */}
