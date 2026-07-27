@@ -2,11 +2,10 @@ import { useEffect, useRef } from "react";
 import { createScrollController } from "../scroll/scrollController.js";
 import { mapRawToCalibratedY } from "../gaze/calibrationManager.js";
 
-const SCROLL_HZ = 20;
-const INTERVAL_MS = 1000 / SCROLL_HZ;
-
 /**
- * Drives scroll on the given containerRef at SCROLL_HZ using gaze data.
+ * Drives scroll on the given containerRef, once per animation frame, using gaze
+ * data. Running on requestAnimationFrame (~60fps) rather than a 20Hz interval
+ * gives smaller, more frequent steps that read as smooth motion.
  *
  * @param {object} params
  * @param {{ rawY: number, confidence: number, hasFace: boolean }} params.gazeData
@@ -27,7 +26,10 @@ export function useScrollControl({
 }) {
   const controllerRef = useRef(createScrollController());
   const lastTickRef = useRef(null);
-  const intervalRef = useRef(null);
+  const rafRef = useRef(null);
+  // Carries the fractional pixel remainder between frames so small per-frame
+  // deltas (which scrollTop would otherwise round away) still accumulate.
+  const scrollAccumRef = useRef(0);
 
   // Keep a ref to the latest values so the interval callback doesn't stale-close
   const stateRef = useRef({});
@@ -60,35 +62,44 @@ export function useScrollControl({
       ) {
         controllerRef.current.reset();
         lastTickRef.current = null;
+        scrollAccumRef.current = 0;
+        rafRef.current = requestAnimationFrame(tick);
         return;
       }
 
       const calibratedY = mapRawToCalibratedY(gaze.rawY, profile);
-      if (calibratedY === null) return;
+      if (calibratedY === null) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
 
       const now = performance.now();
       const deltaTimeSec =
-        lastTickRef.current !== null
-          ? (now - lastTickRef.current) / 1000
-          : INTERVAL_MS / 1000;
+        lastTickRef.current !== null ? (now - lastTickRef.current) / 1000 : 0;
       lastTickRef.current = now;
 
       const delta = controllerRef.current.update(calibratedY, deltaTimeSec, sens);
 
-      if (delta !== 0) {
+      // Accumulate fractional pixels; apply only the whole-pixel part so the
+      // remainder isn't lost to scrollTop rounding between frames.
+      scrollAccumRef.current += delta;
+      const whole = Math.trunc(scrollAccumRef.current);
+      if (whole !== 0) {
+        scrollAccumRef.current -= whole;
         const maxScroll = container.scrollHeight - container.clientHeight;
-        const next = Math.min(
+        container.scrollTop = Math.min(
           maxScroll,
-          Math.max(0, container.scrollTop + delta)
+          Math.max(0, container.scrollTop + whole)
         );
-        container.scrollTop = next;
       }
+
+      rafRef.current = requestAnimationFrame(tick);
     }
 
-    intervalRef.current = setInterval(tick, INTERVAL_MS);
+    rafRef.current = requestAnimationFrame(tick);
 
     return () => {
-      clearInterval(intervalRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       controllerRef.current.reset();
     };
   }, [scrollContainerRef]); // intentionally only re-run if the container ref identity changes

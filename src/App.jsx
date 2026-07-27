@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useGazeTracking } from "./hooks/useGazeTracking.js";
 import { useScrollControl } from "./hooks/useScrollControl.js";
 import { useLocalProfiles } from "./hooks/useLocalProfiles.js";
-import { mapRawToCalibratedY } from "./gaze/calibrationManager.js";
+import { mapRawToCalibratedY, isProfileCalibrated } from "./gaze/calibrationManager.js";
 import PDFViewer from "./components/PDFViewer.jsx";
 import CalibrationScreen from "./components/CalibrationScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
@@ -69,46 +69,38 @@ export default function App() {
   } = useGazeTracking();
 
   const [isTracking, setIsTracking] = useState(false);
-  const [cameraStarted, setCameraStarted] = useState(false);
 
-  const handleStartCamera = useCallback(async () => {
-    await startCamera();
-    setCameraStarted(true);
-  }, [startCamera]);
+  // Tracking requires a profile calibrated for the CURRENT algorithm AND an
+  // uploaded PDF — there's nothing to scroll until a file is loaded.
+  const trackingReady =
+    mediapipeReady && isProfileCalibrated(selectedProfile) && !!pdfUrl;
 
-  const handleStopCamera = useCallback(() => {
-    setIsTracking(false);
-    stopCamera();
-    setCameraStarted(false);
-  }, [stopCamera]);
-
-  // Tracking requires a selected profile that has been calibrated.
-  const trackingReady = mediapipeReady && !!selectedProfile?.points;
-
-  const handleToggleTracking = useCallback(async () => {
-    if (isTracking) {
-      setIsTracking(false);
-    } else {
-      if (!cameraStarted) {
-        await startCamera();
-        setCameraStarted(true);
-      }
-      setIsTracking(true);
-    }
-  }, [isTracking, cameraStarted, startCamera]);
+  const handleToggleTracking = useCallback(() => {
+    setIsTracking((t) => !t);
+  }, []);
 
   // ── Calibration ────────────────────────────────────────────────────────────
   const [isCalibrating, setIsCalibrating] = useState(false);
 
-  const handleStartCalibration = useCallback(async () => {
+  const handleStartCalibration = useCallback(() => {
     if (!selectedProfile) return;
-    if (!cameraStarted) {
-      await startCamera();
-      setCameraStarted(true);
-    }
     setIsTracking(false);
     setIsCalibrating(true);
-  }, [selectedProfile, cameraStarted, startCamera]);
+  }, [selectedProfile]);
+
+  // ── Camera lifecycle ─────────────────────────────────────────────────────
+  // The webcam is only needed while tracking or calibrating; keep it off
+  // otherwise so it isn't running (and its indicator light on) when idle.
+  // startCamera/stopCamera are idempotent, so this stays in sync with intent.
+  const cameraShouldBeOn = isTracking || isCalibrating;
+
+  useEffect(() => {
+    if (cameraShouldBeOn) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+  }, [cameraShouldBeOn, startCamera, stopCamera]);
 
   // Always calibrates the currently selected profile.
   const handleCalibrationComplete = useCallback(
@@ -145,7 +137,7 @@ export default function App() {
 
   // ── Debug values ───────────────────────────────────────────────────────────
   const debugRawY = gazeData.hasFace ? gazeData.rawY : null;
-  const debugCalibratedY = selectedProfile?.points
+  const debugCalibratedY = isProfileCalibrated(selectedProfile)
     ? mapRawToCalibratedY(gazeData.rawY, selectedProfile)
     : null;
 
@@ -197,9 +189,7 @@ export default function App() {
           debugCalibratedY={debugCalibratedY}
           mediapipeReady={mediapipeReady}
           mediapipeError={mediapipeError}
-          cameraActive={cameraStarted}
-          onStartCamera={handleStartCamera}
-          onStopCamera={handleStopCamera}
+          cameraActive={cameraShouldBeOn}
         />
 
         <PDFViewer

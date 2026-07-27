@@ -1,45 +1,35 @@
 /**
- * Vertical gaze estimator using skull-fixed eye corner landmarks.
+ * Vertical gaze estimator using MediaPipe eye blendshapes.
  *
- * Why corners instead of eyelids:
- *   The inner (canthus medialis) and outer (canthus lateralis) eye corners are
- *   anchored to the orbital bone — they do not move when the eyeball rotates.
- *   Eyelid landmarks (159, 145, …) partially follow the iris up/down, which
- *   dilutes the signal and makes the old approach track head tilt more than gaze.
+ * Why blendshapes instead of iris-vs-corner geometry:
+ *   The previous approach measured the iris center's Y offset from the eye
+ *   corners in the 2D image. That relationship shifts when the head PITCHES
+ *   (nods) even if the eyeball doesn't rotate, so head movement leaked in as
+ *   fake gaze.
  *
- *   By measuring the iris center's Y offset from the corner midpoint, then
- *   normalizing by eye WIDTH (also skull-fixed and scale-stable), we get a
- *   value that reflects eyeball rotation and is largely independent of where
- *   the head is positioned or tilted.
+ *   MediaPipe's FaceLandmarker emits ARKit-style blendshape coefficients,
+ *   including eyeLookUp/eyeLookDown per eye. These model eyeball rotation
+ *   RELATIVE TO THE HEAD, so they respond to where the eyes point and stay
+ *   largely stable as the head tilts — exactly what we want for gaze scrolling.
  *
- * Landmark indices (MediaPipe 478-point face mesh):
- *   Left  inner corner : 133   Left  outer corner : 33
- *   Right inner corner : 362   Right outer corner : 263
- *   Left  upper lid    : 159   Left  lower lid    : 145
- *   Right upper lid    : 386   Right lower lid    : 374
- *   Left  iris center  : 468   Right iris center  : 473
+ * Vertical gaze signal:
+ *   lookUp   = mean(eyeLookUpLeft,   eyeLookUpRight)     ∈ [0,1]
+ *   lookDown = mean(eyeLookDownLeft, eyeLookDownRight)   ∈ [0,1]
+ *   vertical = lookDown - lookUp                         ∈ [-1,1]  (+ = down)
+ *   rawY     = 0.5 + vertical * 0.5 * AMPLIFICATION      (clamped [0,1])
+ *
+ *   Calibration (top/center/bottom) later maps this raw value onto the screen,
+ *   so AMPLIFICATION only needs to give enough separation to calibrate against.
  */
 
-const LEFT_INNER  = 133;
-const LEFT_OUTER  = 33;
-const RIGHT_INNER = 362;
-const RIGHT_OUTER = 263;
-const LEFT_UPPER  = 159;
-const LEFT_LOWER  = 145;
-const RIGHT_UPPER = 386;
-const RIGHT_LOWER = 374;
-const LEFT_IRIS   = 468;
-const RIGHT_IRIS  = 473;
+// Amplify the raw up/down difference so ordinary reading gaze (which rarely
+// drives the blendshapes to their extremes) produces a usable spread.
+const AMPLIFICATION = 1.6;
 
-// How much to amplify the iris-offset signal.
-const AMPLIFICATION = 4.0;
-
-// Eye Aspect Ratio threshold: eyelid opening / eye width.
-// Below this the eyes are too closed or squinted to produce a reliable gaze
-// reading, so we return confidence 0 and scrolling stops.
-// Typical value for a comfortably open eye is ~0.20–0.30; 0.15 catches blinks
-// and heavy squinting while leaving normal reading gaze unaffected.
-const EAR_THRESHOLD = 0.15;
+// Blink/closed-eye cutoff: eyeBlink coefficients approach 1 when the lid closes.
+// Above this the eye gaze reading is unreliable, so we drop confidence to 0 and
+// scrolling pauses (mirrors the old EAR-based blink guard).
+const BLINK_THRESHOLD = 0.5;
 
 /**
  * @param {object|null} result - detectForVideo result from FaceLandmarker
@@ -50,62 +40,30 @@ export function estimateGaze(result) {
     return { rawY: 0.5, confidence: 0, hasFace: false };
   }
 
-  const lm = result.faceLandmarks[0];
-
-  if (!lm || lm.length < 468) {
-    return { rawY: 0.5, confidence: 0, hasFace: false };
-  }
-
-  // Iris landmarks are indices 468-477; require both centers to be present.
-  if (lm.length <= RIGHT_IRIS || !lm[LEFT_IRIS] || !lm[RIGHT_IRIS]) {
+  const categories = result?.faceBlendshapes?.[0]?.categories;
+  if (!categories?.length) {
+    // Face detected but blendshapes unavailable — can't estimate gaze.
     return { rawY: 0.5, confidence: 0, hasFace: true };
   }
 
-  const leftInner  = lm[LEFT_INNER];
-  const leftOuter  = lm[LEFT_OUTER];
-  const rightInner = lm[RIGHT_INNER];
-  const rightOuter = lm[RIGHT_OUTER];
-  const leftUpper  = lm[LEFT_UPPER];
-  const leftLower  = lm[LEFT_LOWER];
-  const rightUpper = lm[RIGHT_UPPER];
-  const rightLower = lm[RIGHT_LOWER];
-  const leftIris   = lm[LEFT_IRIS];
-  const rightIris  = lm[RIGHT_IRIS];
+  // Build a name→score lookup once; blendshape order isn't guaranteed.
+  const score = {};
+  for (const c of categories) score[c.categoryName] = c.score;
+  const get = (name) => score[name] ?? 0;
 
-  if (!leftInner || !leftOuter || !rightInner || !rightOuter ||
-      !leftUpper || !leftLower || !rightUpper || !rightLower) {
+  // Closed eyes (blink or squint) make the gaze reading meaningless.
+  const blink = Math.max(get("eyeBlinkLeft"), get("eyeBlinkRight"));
+  if (blink > BLINK_THRESHOLD) {
     return { rawY: 0.5, confidence: 0, hasFace: true };
   }
 
-  // Eye width: horizontal span between corners. Stable, scales with face size.
-  const leftEyeW  = Math.abs(leftOuter.x  - leftInner.x);
-  const rightEyeW = Math.abs(rightOuter.x - rightInner.x);
+  const lookUp   = (get("eyeLookUpLeft")   + get("eyeLookUpRight"))   / 2;
+  const lookDown = (get("eyeLookDownLeft") + get("eyeLookDownRight")) / 2;
 
-  if (leftEyeW < 0.01 || rightEyeW < 0.01) {
-    return { rawY: 0.5, confidence: 0, hasFace: true };
-  }
+  // Signed vertical gaze: positive → looking down, negative → looking up.
+  const vertical = lookDown - lookUp;
 
-  // Eye Aspect Ratio: eyelid opening normalised by eye width.
-  // When the eyes are closed or squinted this drops toward 0.
-  const leftEAR  = (leftLower.y  - leftUpper.y)  / leftEyeW;
-  const rightEAR = (rightLower.y - rightUpper.y) / rightEyeW;
-  const avgEAR   = (leftEAR + rightEAR) / 2;
-
-  if (avgEAR < EAR_THRESHOLD) {
-    return { rawY: 0.5, confidence: 0, hasFace: true };
-  }
-
-  // Corner midpoint Y: skull-fixed vertical reference for each eye.
-  const leftCornerMidY  = (leftInner.y  + leftOuter.y)  / 2;
-  const rightCornerMidY = (rightInner.y + rightOuter.y) / 2;
-
-  // Signed offset: positive → iris below corner midpoint → looking down
-  //                negative → iris above corner midpoint → looking up
-  const leftOffset  = (leftIris.y  - leftCornerMidY)  / leftEyeW;
-  const rightOffset = (rightIris.y - rightCornerMidY) / rightEyeW;
-  const avgOffset   = (leftOffset + rightOffset) / 2;
-
-  const rawY = 0.5 + avgOffset * AMPLIFICATION;
+  const rawY = 0.5 + vertical * 0.5 * AMPLIFICATION;
 
   if (!isFinite(rawY) || isNaN(rawY)) {
     return { rawY: 0.5, confidence: 0, hasFace: true };

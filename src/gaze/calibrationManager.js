@@ -1,3 +1,5 @@
+import { CALIBRATION_VERSION } from "../config.js";
+
 const STORAGE_KEY = "sightread_profiles";
 const SELECTED_KEY = "sightread_selected_profile";
 
@@ -30,6 +32,8 @@ export function createProfile(name, points) {
     name: name.trim() || "Default",
     createdAt: new Date().toISOString(),
     points,
+    // Only meaningful once points exist; stamp the version they were made with.
+    calibrationVersion: points ? CALIBRATION_VERSION : null,
   };
   const existing = loadProfiles();
   saveProfiles([...existing, profile]);
@@ -39,10 +43,41 @@ export function createProfile(name, points) {
 export function updateProfile(id, points) {
   const profiles = loadProfiles();
   const updated = profiles.map((p) =>
-    p.id === id ? { ...p, points, updatedAt: new Date().toISOString() } : p
+    p.id === id
+      ? {
+          ...p,
+          points,
+          calibrationVersion: CALIBRATION_VERSION,
+          updatedAt: new Date().toISOString(),
+        }
+      : p
   );
   saveProfiles(updated);
   return updated.find((p) => p.id === id);
+}
+
+/**
+ * Whether a profile is calibrated FOR THE CURRENT gaze algorithm. Points saved
+ * under an older CALIBRATION_VERSION are meaningless now, so they count as
+ * uncalibrated and the user is prompted to recalibrate.
+ *
+ * @param {object|null} profile
+ * @returns {boolean}
+ */
+export function isProfileCalibrated(profile) {
+  return !!profile?.points && profile.calibrationVersion === CALIBRATION_VERSION;
+}
+
+/**
+ * A profile that HAS calibration points but from an older version — i.e. it
+ * looks calibrated but needs redoing. Lets the UI show a clearer message than
+ * "not calibrated yet".
+ *
+ * @param {object|null} profile
+ * @returns {boolean}
+ */
+export function isCalibrationStale(profile) {
+  return !!profile?.points && profile.calibrationVersion !== CALIBRATION_VERSION;
 }
 
 export function deleteProfile(id) {

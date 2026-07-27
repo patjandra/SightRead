@@ -1,5 +1,10 @@
 import React, { useRef } from "react";
 import ProfileSelector from "./ProfileSelector.jsx";
+import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../config.js";
+import {
+  isProfileCalibrated,
+  isCalibrationStale,
+} from "../gaze/calibrationManager.js";
 
 // Log-scale mapping so that 0.40 sits exactly at the slider midpoint (0.5).
 // Range: slider 0 → sens 0.10,  slider 0.5 → sens 0.40,  slider 1 → sens 1.60
@@ -48,8 +53,6 @@ export default function ControlPanel({
   mediapipeReady,
   mediapipeError,
   cameraActive,
-  onStartCamera,
-  onStopCamera,
 }) {
   const fileInputRef = useRef(null);
 
@@ -124,32 +127,34 @@ export default function ControlPanel({
 
       {/* Camera status */}
       <section>
-        <p className="text-xs font-semibold uppercase text-gray-400 mb-1">Camera</p>
         {mediapipeError ? (
-          <p className="text-xs text-red-400">{mediapipeError}</p>
+          <>
+            <p className="text-xs font-semibold uppercase text-gray-400 mb-1">Camera</p>
+            <p className="text-xs text-red-400">{mediapipeError}</p>
+          </>
         ) : mediapipeReady ? (
           <div className="flex items-center justify-between gap-2">
-            <p className={`text-xs ${cameraActive ? "text-green-400" : "text-gray-500"}`}>
+            <p className="text-xs font-semibold uppercase text-gray-400">Camera</p>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold border ${
+                cameraActive
+                  ? "bg-green-500/15 border-green-500/40 text-green-400"
+                  : "bg-red-500/15 border-red-500/40 text-red-400"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  cameraActive ? "bg-green-400" : "bg-red-400"
+                }`}
+              />
               {cameraActive ? "On" : "Off"}
-            </p>
-            {cameraActive ? (
-              <button
-                className="text-xs text-gray-500 hover:text-red-400 underline"
-                onClick={onStopCamera}
-              >
-                Turn off
-              </button>
-            ) : (
-              <button
-                className="text-xs text-gray-500 hover:text-green-400 underline"
-                onClick={onStartCamera}
-              >
-                Turn on
-              </button>
-            )}
+            </span>
           </div>
         ) : (
-          <p className="text-xs text-yellow-400">Loading model…</p>
+          <>
+            <p className="text-xs font-semibold uppercase text-gray-400 mb-1">Camera</p>
+            <p className="text-xs text-yellow-400">Loading model…</p>
+          </>
         )}
       </section>
 
@@ -163,6 +168,11 @@ export default function ControlPanel({
           onDelete={onDeleteProfile}
           onCreate={onCreateProfile}
         />
+        {selectedProfile && isCalibrationStale(selectedProfile) && (
+          <p className="text-xs text-yellow-400 mt-1">
+            Calibration is out of date — recalibrate below.
+          </p>
+        )}
         {selectedProfile && !selectedProfile.points && (
           <p className="text-xs text-yellow-400 mt-1">
             No calibration yet — click Calibrate below.
@@ -203,8 +213,12 @@ export default function ControlPanel({
               ? "Waiting for model…"
               : !selectedProfile
               ? "Select a profile first."
-              : !selectedProfile.points
+              : isCalibrationStale(selectedProfile)
+              ? "Recalibrate the profile first."
+              : !isProfileCalibrated(selectedProfile)
               ? "Calibrate the profile first."
+              : !hasPdf
+              ? "Upload a PDF first."
               : ""}
           </p>
         )}
@@ -267,6 +281,29 @@ export default function ControlPanel({
             {debugCalibratedY !== null ? debugCalibratedY.toFixed(3) : "—"}
           </span>
         </p>
+        {(() => {
+          // Shared thresholds, so the readout always matches what actually
+          // drives scrolling.
+          const zone =
+            debugCalibratedY === null
+              ? null
+              : debugCalibratedY < SCROLL_UP_THRESHOLD
+              ? "▲ up"
+              : debugCalibratedY > SCROLL_DOWN_THRESHOLD
+              ? "▼ down"
+              : "• neutral";
+          const color =
+            zone === null
+              ? "text-gray-200"
+              : zone === "• neutral"
+              ? "text-green-400"
+              : "text-yellow-400";
+          return (
+            <p className="text-xs text-gray-400">
+              zone: <span className={color}>{zone ?? "—"}</span>
+            </p>
+          );
+        })()}
       </section>
     </aside>
   );

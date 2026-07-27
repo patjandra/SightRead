@@ -83,10 +83,17 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
 
   function finishStep() {
     const samples = samplesRef.current;
-    const avg =
-      samples.length > 0
-        ? samples.reduce((a, b) => a + b, 0) / samples.length
-        : 0.5;
+
+    // No valid gaze samples means the face wasn't detected during this step.
+    // Accepting it would default to 0.5 and, if it happens on every step,
+    // produce a degenerate all-0.5 profile that maps every gaze to "neutral".
+    // Surface it and let the user retry this step instead of failing silently.
+    if (samples.length === 0) {
+      setPhase("failed");
+      return;
+    }
+
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
 
     const newPoints = { ...points, [step.key]: avg };
     setPoints(newPoints);
@@ -95,20 +102,50 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
     if (stepIndex < STEPS.length - 1) {
       setTimeout(() => setStepIndex((i) => i + 1), 350);
     } else {
+      // Final guard: the top→bottom span must be wide enough to map gaze onto
+      // distinct zones. Too small means the readings never separated (e.g. the
+      // eyes barely moved or detection was poor) and scrolling would be stuck.
+      const span = Math.abs(newPoints.bottom - newPoints.top);
+      if (span < 0.04) {
+        setPhase("failed");
+        return;
+      }
       setTimeout(() => onComplete(newPoints), 350);
     }
   }
+
+  // Restart the current step's countdown+collection after a failed capture.
+  const retryStep = useCallback(() => {
+    setPhase("countdown");
+    setCountdown(COUNTDOWN_N);
+    setProgress(0);
+    samplesRef.current = [];
+
+    let count = COUNTDOWN_N;
+    timerRef.current = setInterval(() => {
+      count -= 1;
+      if (count <= 0) {
+        clearInterval(timerRef.current);
+        beginCollecting();
+      } else {
+        setCountdown(count);
+      }
+    }, COUNTDOWN_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Inner dot colour
   const dotColor =
     phase === "collecting" ? "bg-green-400" :
     phase === "done"       ? "bg-blue-400"  :
+    phase === "failed"     ? "bg-red-400"   :
     "bg-white";
 
   // Ring progress colour (stroke)
   const ringStroke =
     phase === "collecting" ? "#4ade80" :   // green-400
     phase === "done"       ? "#60a5fa" :   // blue-400
+    phase === "failed"     ? "#f87171" :   // red-400
     "#e5e7eb";                              // gray-200 during countdown
 
   const progressDash = `${progress * RING_C} ${RING_C}`;
@@ -177,6 +214,9 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
               {phase === "done" && (
                 <span className="text-white text-base leading-none select-none">✓</span>
               )}
+              {phase === "failed" && (
+                <span className="text-white text-lg font-bold leading-none select-none">!</span>
+              )}
             </div>
           </div>
 
@@ -193,17 +233,37 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
           cardAtBottom ? "bottom-16" : "top-14"
         }`}
       >
-        <div className="bg-gray-800/90 backdrop-blur-sm rounded-2xl px-6 py-4 text-center max-w-xs shadow-xl">
-          <p className="text-white font-semibold text-base mb-1">
-            Look at the <span className="text-green-400">{step.label}</span> dot
-          </p>
-          <p className="text-gray-400 text-sm leading-snug">
-            {phase === "countdown"
-              ? `Starting in ${countdown}…`
-              : phase === "collecting"
-              ? "Hold still while the ring fills"
-              : "Captured!"}
-          </p>
+        <div className="bg-gray-800/90 backdrop-blur-sm rounded-2xl px-6 py-4 text-center max-w-xs shadow-xl pointer-events-auto">
+          {phase === "failed" ? (
+            <>
+              <p className="text-white font-semibold text-base mb-1">
+                Couldn’t read your gaze
+              </p>
+              <p className="text-gray-400 text-sm leading-snug mb-3">
+                Make sure your face is well-lit and centered in the camera, then
+                try this step again.
+              </p>
+              <button
+                className="bg-indigo-600 hover:bg-indigo-500 rounded px-4 py-1.5 text-sm font-medium"
+                onClick={retryStep}
+              >
+                Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-white font-semibold text-base mb-1">
+                Look at the <span className="text-green-400">{step.label}</span> dot
+              </p>
+              <p className="text-gray-400 text-sm leading-snug">
+                {phase === "countdown"
+                  ? `Starting in ${countdown}…`
+                  : phase === "collecting"
+                  ? "Hold still while the ring fills"
+                  : "Captured!"}
+              </p>
+            </>
+          )}
         </div>
       </div>
 

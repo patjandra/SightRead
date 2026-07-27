@@ -1,21 +1,26 @@
 /**
  * Stateful scroll controller.
  *
- * Zones:
- *   calibratedY < 0.25  → scroll up
- *   0.25–0.75           → neutral (wide dead zone for comfortable reading)
- *   calibratedY > 0.75  → scroll down
+ * Zones (thresholds live in config.js):
+ *   calibratedY < SCROLL_UP_THRESHOLD    → scroll up
+ *   between the two thresholds           → neutral (dead zone for reading)
+ *   calibratedY > SCROLL_DOWN_THRESHOLD  → scroll down
  *
- * Dynamic speed: maxSpeed * distance^2 * sensitivity
+ * Dynamic speed: maxSpeed * distance^2 * sensitivity. Because speed grows with
+ *   distance from the threshold, motion already ramps up smoothly from ~0 as
+ *   your gaze moves into a zone — no extra velocity momentum needed (that only
+ *   caused the scroll to coast after you looked back to center).
  * Dwell: must stay in zone ≥ DWELL_MS before first scroll tick.
- * Smoothing: moving average over a ~300ms window at 30 FPS.
+ * Smoothing: moving average over a ~300ms window on gaze position. The delta is
+ *   scaled by elapsed time, so the controller behaves the same whether ticked
+ *   at 20 or 60 FPS.
  */
 
-const SCROLL_UP_THRESHOLD = 0.25;
-const SCROLL_DOWN_THRESHOLD = 0.75;
+import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../config.js";
+
 const MAX_SPEED_PX_PER_SEC = 200;
 const DWELL_MS = 250;
-const SMOOTH_WINDOW = 9; // ~300ms at 30fps
+const SMOOTH_WINDOW = 18; // ~300ms at 60fps
 
 export function createScrollController() {
   const gazeBuffer = [];
@@ -67,11 +72,13 @@ export function createScrollController() {
       isDwelling = false;
     }
 
+    // Neutral zone: stop immediately (no coasting), so the page settles the
+    // moment your gaze returns to the reading band.
     if (zone === "neutral") {
       return 0;
     }
 
-    // Check dwell requirement
+    // Dwell requirement before the first scroll tick in a new zone.
     if (!isDwelling) {
       if (dwellStart !== null && now - dwellStart >= DWELL_MS) {
         isDwelling = true;

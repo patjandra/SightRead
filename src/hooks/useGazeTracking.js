@@ -55,7 +55,10 @@ export function useGazeTracking() {
           },
           runningMode: "VIDEO",
           numFaces: 1,
-          outputFaceBlendshapes: false,
+          // Blendshapes give us eyeLookUp/Down/In/Out coefficients that model
+          // eyeball rotation relative to the head — the signal the gaze
+          // estimator uses so that head movement doesn't masquerade as gaze.
+          outputFaceBlendshapes: true,
           outputFacialTransformationMatrixes: false,
         });
 
