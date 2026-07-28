@@ -179,7 +179,7 @@ export default function App() {
     : 0.5;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 overflow-hidden">
+    <div className="h-screen flex flex-col bg-slate-900 overflow-hidden">
       {/* Hidden video for webcam */}
       <video
         ref={videoRef}

@@ -85,7 +85,7 @@ export default function ProfileSelector({
     <div ref={containerRef} className="relative">
       {/* Trigger button */}
       <button
-        className="w-full flex items-center justify-between gap-2 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm hover:bg-gray-600 transition-colors"
+        className="w-full flex items-center justify-between gap-2 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm hover:bg-slate-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
         onClick={() => setOpen((v) => !v)}
       >
         <span className="truncate text-left flex-1">
@@ -93,36 +93,42 @@ export default function ProfileSelector({
             <span>
               {selected.name}
               {!selected.points && (
-                <span className="ml-1 text-yellow-400 text-xs">· uncalibrated</span>
+                <span className="ml-1 text-amber-400 text-xs">· uncalibrated</span>
               )}
             </span>
           ) : (
-            <span className="text-gray-400">Select profile…</span>
+            <span className="text-slate-400">Select profile…</span>
           )}
         </span>
-        <span className="text-gray-400 text-xs flex-shrink-0">{open ? "▲" : "▼"}</span>
+        <svg
+          viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+          strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          className={`text-slate-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-600 rounded shadow-xl">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1.5 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
           {/* Profile list */}
           {profiles.length > 0 && (
-            <ul className="max-h-44 overflow-y-auto">
+            <ul className="sr-scroll max-h-44 overflow-y-auto p-1">
               {profiles.map((p) => (
                 <li
                   key={p.id}
-                  className={`flex items-center gap-1 px-2 py-1.5 cursor-pointer text-sm select-none ${
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-sm select-none ${
                     p.id === selectedId
-                      ? "bg-blue-700 text-white"
-                      : "text-gray-200 hover:bg-gray-700"
+                      ? "bg-indigo-600 text-white"
+                      : "text-slate-200 hover:bg-slate-700"
                   }`}
                   onClick={() => handleSelect(p.id)}
                 >
                   {/* Calibration indicator */}
                   <span
                     className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      p.points ? "bg-green-400" : "bg-yellow-500"
+                      p.points ? "bg-emerald-400" : "bg-amber-400"
                     }`}
                     title={p.points ? "Calibrated" : "Not calibrated"}
                   />
@@ -130,8 +136,10 @@ export default function ProfileSelector({
                   <button
                     className={`text-xs flex-shrink-0 px-1 rounded ${
                       confirmDelete === p.id
-                        ? "text-red-400 font-bold"
-                        : "text-gray-500 hover:text-red-400"
+                        ? "text-red-300 font-bold"
+                        : p.id === selectedId
+                        ? "text-indigo-200 hover:text-white"
+                        : "text-slate-500 hover:text-red-400"
                     }`}
                     onClick={(e) => handleDeleteClick(p.id, e)}
                     title={
@@ -146,10 +154,10 @@ export default function ProfileSelector({
           )}
 
           {/* Create new */}
-          <div className="border-t border-gray-700 p-2 flex flex-col gap-1">
+          <div className="border-t border-slate-700 p-2 flex flex-col gap-1.5">
             <input
               ref={inputRef}
-              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-900 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50"
               placeholder="New profile name…"
               value={newName}
               onChange={(e) => {
@@ -162,7 +170,7 @@ export default function ProfileSelector({
               <p className="text-xs text-red-400">{nameError}</p>
             )}
             <button
-              className="w-full bg-indigo-600 hover:bg-indigo-500 rounded px-2 py-1 text-xs font-medium"
+              className="w-full bg-indigo-600 hover:bg-indigo-500 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors"
               onClick={handleCreate}
             >
               Create profile

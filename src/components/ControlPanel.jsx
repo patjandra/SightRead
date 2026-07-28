@@ -38,6 +38,17 @@ function HamburgerIcon({ size = 18 }) {
   );
 }
 
+// Small, consistent section heading used throughout the panel.
+function SectionLabel({ children, className = "" }) {
+  return (
+    <p
+      className={`text-[11px] font-semibold uppercase tracking-wider text-slate-400 ${className}`}
+    >
+      {children}
+    </p>
+  );
+}
+
 export default function ControlPanel({
   // Panel toggle
   panelOpen,
@@ -87,44 +98,56 @@ export default function ControlPanel({
 
   const calibrateLabel = isCalibrating
     ? "Calibrating…"
-    : selectedProfile
+    : !selectedProfile
+    ? "Calibrate"
+    : selectedProfile.points
     ? `Recalibrate "${selectedProfile.name}"`
-    : "Calibrate";
+    : `Calibrate "${selectedProfile.name}"`;
 
-  // Collapsed view — just a thin tab with a toggle arrow
+  // Collapsed view — a slim rail with the logo and a menu button.
   if (!panelOpen) {
     return (
-      <div className="w-8 flex-shrink-0 bg-gray-800 flex flex-col items-center pt-3 gap-3 border-r border-gray-700">
+      <div className="w-12 flex-shrink-0 bg-slate-800 flex flex-col items-center pt-3 gap-4 border-r border-slate-700">
         <button
           onClick={onTogglePanel}
-          className="text-gray-400 hover:text-white flex items-center justify-center"
+          className="text-slate-400 hover:text-white p-1.5 rounded-md hover:bg-slate-700 transition-colors"
           title="Expand panel"
           aria-label="Expand panel"
         >
           <HamburgerIcon />
         </button>
-        <span
-          className="text-gray-600 text-xs font-bold select-none"
-          style={{ writingMode: "vertical-rl", letterSpacing: "0.1em" }}
-        >
-          SR
-        </span>
+        <img
+          src="/sight-read-logo.png"
+          alt="SightRead"
+          className="w-7 h-7 rounded-md opacity-90"
+        />
       </div>
     );
   }
 
   return (
-    <aside className="w-56 flex-shrink-0 bg-gray-800 text-white flex flex-col gap-4 p-3 overflow-y-auto text-sm border-r border-gray-700">
+    <aside className="sr-scroll w-64 flex-shrink-0 bg-slate-800 text-slate-100 flex flex-col gap-3 px-3 py-3 overflow-y-auto text-sm border-r border-slate-700">
 
-      {/* Header with collapse toggle */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-lg font-bold tracking-tight">SightRead</h1>
-          <p className="text-xs text-gray-400">Gaze-based sheet music scroller</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <img
+            src="/sight-read-logo.png"
+            alt=""
+            className="w-8 h-8 rounded-md flex-shrink-0"
+          />
+          <div className="min-w-0">
+            <h1 className="text-base font-bold tracking-tight leading-tight">
+              SightRead
+            </h1>
+            <p className="text-[11px] text-slate-500 leading-tight truncate">
+              Gaze sheet-music scroller
+            </p>
+          </div>
         </div>
         <button
           onClick={onTogglePanel}
-          className="text-gray-500 hover:text-white mt-1 ml-1 flex-shrink-0 flex items-center justify-center"
+          className="text-slate-400 hover:text-white p-1.5 -mr-1 rounded-md hover:bg-slate-700 transition-colors flex-shrink-0"
           title="Collapse panel"
           aria-label="Collapse panel"
         >
@@ -133,13 +156,18 @@ export default function ControlPanel({
       </div>
 
       {/* PDF Upload */}
-      <section>
-        <p className="text-xs font-semibold uppercase text-gray-400 mb-1">PDF</p>
+      <section className="space-y-1.5">
+        <SectionLabel>Sheet music</SectionLabel>
         <button
-          className="w-full text-left bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded px-2 py-1 text-sm truncate"
+          className="w-full flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
           onClick={() => fileInputRef.current?.click()}
         >
-          {hasPdf ? "Change PDF" : "Upload PDF"}
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
+            <path d="M12 3v12" />
+            <path d="m7 8 5-5 5 5" />
+            <path d="M5 21h14" />
+          </svg>
+          <span className="truncate">{hasPdf ? "Change PDF" : "Upload PDF"}</span>
         </button>
         <input
           ref={fileInputRef}
@@ -151,41 +179,36 @@ export default function ControlPanel({
       </section>
 
       {/* Camera status */}
-      <section>
+      <section className="flex items-center justify-between">
+        <SectionLabel>Camera</SectionLabel>
         {mediapipeError ? (
-          <>
-            <p className="text-xs font-semibold uppercase text-gray-400 mb-1">Camera</p>
-            <p className="text-xs text-red-400">{mediapipeError}</p>
-          </>
+          <span className="text-xs text-red-400 text-right">Error</span>
         ) : mediapipeReady ? (
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase text-gray-400">Camera</p>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
+              cameraActive
+                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
+                : "bg-slate-700/40 border-slate-600 text-slate-400"
+            }`}
+          >
             <span
-              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold border ${
-                cameraActive
-                  ? "bg-green-500/15 border-green-500/40 text-green-400"
-                  : "bg-red-500/15 border-red-500/40 text-red-400"
+              className={`w-1.5 h-1.5 rounded-full ${
+                cameraActive ? "bg-emerald-400" : "bg-slate-500"
               }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  cameraActive ? "bg-green-400" : "bg-red-400"
-                }`}
-              />
-              {cameraActive ? "On" : "Off"}
-            </span>
-          </div>
+            />
+            {cameraActive ? "On" : "Off"}
+          </span>
         ) : (
-          <>
-            <p className="text-xs font-semibold uppercase text-gray-400 mb-1">Camera</p>
-            <p className="text-xs text-yellow-400">Loading model…</p>
-          </>
+          <span className="text-xs text-amber-400">Loading model…</span>
         )}
       </section>
+      {mediapipeError && (
+        <p className="-mt-2 text-xs text-red-400/90 leading-snug">{mediapipeError}</p>
+      )}
 
       {/* Profile selector */}
-      <section>
-        <p className="text-xs font-semibold uppercase text-gray-400 mb-1">Profile</p>
+      <section className="space-y-1.5">
+        <SectionLabel>Profile</SectionLabel>
         <ProfileSelector
           profiles={profiles}
           selectedId={selectedId}
@@ -194,13 +217,13 @@ export default function ControlPanel({
           onCreate={onCreateProfile}
         />
         {selectedProfile && isCalibrationStale(selectedProfile) && (
-          <p className="text-xs text-yellow-400 mt-1">
-            Calibration is out of date — recalibrate below.
+          <p className="text-xs text-amber-400">
+            Calibration out of date — recalibrate below.
           </p>
         )}
         {selectedProfile && !selectedProfile.points && (
-          <p className="text-xs text-yellow-400 mt-1">
-            No calibration yet — click Calibrate below.
+          <p className="text-xs text-amber-400">
+            Not calibrated yet — click Calibrate.
           </p>
         )}
       </section>
@@ -208,32 +231,32 @@ export default function ControlPanel({
       {/* Calibration */}
       <section>
         <button
-          className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded px-2 py-1 text-sm font-medium"
+          className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
           onClick={onStartCalibration}
           disabled={!mediapipeReady || isCalibrating || !selectedProfile}
         >
           {calibrateLabel}
         </button>
         {!selectedProfile && (
-          <p className="text-xs text-gray-500 mt-1">Select or create a profile first.</p>
+          <p className="text-xs text-slate-500 mt-1.5">Select or create a profile first.</p>
         )}
       </section>
 
       {/* Tracking */}
       <section>
         <button
-          className={`w-full rounded px-2 py-1 text-sm font-medium disabled:opacity-40 ${
+          className={`w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 focus:outline-none focus:ring-2 ${
             isTracking
-              ? "bg-red-600 hover:bg-red-500"
-              : "bg-green-600 hover:bg-green-500"
+              ? "bg-red-600 hover:bg-red-500 focus:ring-red-500/50 disabled:hover:bg-red-600"
+              : "bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500/50 disabled:hover:bg-emerald-600"
           }`}
           onClick={onToggleTracking}
           disabled={!trackingReady}
         >
-          {isTracking ? "Pause Tracking" : "Start Tracking"}
+          {isTracking ? "Pause tracking" : "Start tracking"}
         </button>
         {!trackingReady && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-slate-500 mt-1.5">
             {!mediapipeReady
               ? "Waiting for model…"
               : !selectedProfile
@@ -250,10 +273,13 @@ export default function ControlPanel({
       </section>
 
       {/* Sensitivity */}
-      <section>
-        <label className="text-xs font-semibold uppercase text-gray-400 mb-1 block">
-          Sensitivity: {sensitivity.toFixed(2)}
-        </label>
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <SectionLabel>Sensitivity</SectionLabel>
+          <span className="text-xs font-mono text-slate-300 tabular-nums">
+            {sensitivity.toFixed(2)}
+          </span>
+        </div>
         <input
           type="range"
           min="0"
@@ -261,30 +287,36 @@ export default function ControlPanel({
           step="0.01"
           value={sensitivityToSlider(sensitivity)}
           onChange={(e) => onSensitivityChange(sliderToSensitivity(parseFloat(e.target.value)))}
-          className="w-full accent-indigo-500"
+          className="w-full accent-indigo-500 cursor-pointer"
         />
-        <div className="flex justify-between text-xs text-gray-600 mt-0.5">
+        <div className="flex justify-between text-[10px] text-slate-600">
           <span>0.10</span>
-          <span className="text-gray-500">0.40</span>
+          <span>0.40</span>
           <span>1.60</span>
         </div>
       </section>
 
       {/* Zoom */}
-      <section>
-        <p className="text-xs font-semibold uppercase text-gray-400 mb-1">
-          Zoom: {Math.round(zoom * 100)}%
-        </p>
-        <div className="flex gap-1">
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <SectionLabel>Zoom</SectionLabel>
+          <span className="text-xs font-mono text-slate-300 tabular-nums">
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
+        <div className="flex items-center rounded-lg border border-slate-600 overflow-hidden">
           <button
-            className="flex-1 bg-gray-700 hover:bg-gray-600 rounded py-1 text-sm"
+            className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
             onClick={onZoomOut}
+            aria-label="Zoom out"
           >
             −
           </button>
+          <div className="w-px self-stretch bg-slate-600" />
           <button
-            className="flex-1 bg-gray-700 hover:bg-gray-600 rounded py-1 text-sm"
+            className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
             onClick={onZoomIn}
+            aria-label="Zoom in"
           >
             +
           </button>
@@ -292,22 +324,20 @@ export default function ControlPanel({
       </section>
 
       {/* Face preview — shows what the camera sees and how you're framed */}
-      <section>
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-semibold uppercase text-gray-400">
-            Face view
-          </p>
+      <section className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <SectionLabel>Face view</SectionLabel>
           <button
             onClick={() => setShowFaceView((v) => !v)}
             role="switch"
             aria-checked={showFaceView}
             title={showFaceView ? "Hide face view" : "Show face view"}
-            className={`relative w-9 h-5 rounded-full transition-colors ${
-              showFaceView ? "bg-green-600" : "bg-gray-600"
+            className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
+              showFaceView ? "bg-indigo-600" : "bg-slate-600"
             }`}
           >
             <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
                 showFaceView ? "translate-x-4" : "translate-x-0"
               }`}
             />
@@ -320,7 +350,7 @@ export default function ControlPanel({
               active={cameraActive}
               framingOk={framingOk}
             />
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-[11px] text-slate-500">
               Keep your face inside the guide.
             </p>
           </>
@@ -328,43 +358,46 @@ export default function ControlPanel({
       </section>
 
       {/* Debug */}
-      <section className="mt-auto border-t border-gray-700 pt-2">
-        <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Debug</p>
-        <p className="text-xs text-gray-400">
-          rawY:{" "}
-          <span className="text-gray-200">
-            {debugRawY !== null ? debugRawY.toFixed(3) : "—"}
-          </span>
-        </p>
-        <p className="text-xs text-gray-400">
-          calibY:{" "}
-          <span className="text-gray-200">
-            {debugCalibratedY !== null ? debugCalibratedY.toFixed(3) : "—"}
-          </span>
-        </p>
-        {(() => {
-          // Shared thresholds, so the readout always matches what actually
-          // drives scrolling.
-          const zone =
-            debugCalibratedY === null
-              ? null
-              : debugCalibratedY < SCROLL_UP_THRESHOLD
-              ? "▲ up"
-              : debugCalibratedY > SCROLL_DOWN_THRESHOLD
-              ? "▼ down"
-              : "• neutral";
-          const color =
-            zone === null
-              ? "text-gray-200"
-              : zone === "• neutral"
-              ? "text-green-400"
-              : "text-yellow-400";
-          return (
-            <p className="text-xs text-gray-400">
-              zone: <span className={color}>{zone ?? "—"}</span>
-            </p>
-          );
-        })()}
+      <section className="mt-auto border-t border-slate-700 pt-3">
+        <SectionLabel className="mb-1.5">Gaze data</SectionLabel>
+        <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+          <div>
+            <div className="text-slate-500">rawY</div>
+            <div className="text-slate-200 tabular-nums">
+              {debugRawY !== null ? debugRawY.toFixed(3) : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-slate-500">calibY</div>
+            <div className="text-slate-200 tabular-nums">
+              {debugCalibratedY !== null ? debugCalibratedY.toFixed(3) : "—"}
+            </div>
+          </div>
+          {(() => {
+            // Shared thresholds, so the readout always matches what actually
+            // drives scrolling.
+            const zone =
+              debugCalibratedY === null
+                ? null
+                : debugCalibratedY < SCROLL_UP_THRESHOLD
+                ? "▲ up"
+                : debugCalibratedY > SCROLL_DOWN_THRESHOLD
+                ? "▼ down"
+                : "• neutral";
+            const color =
+              zone === null
+                ? "text-slate-200"
+                : zone === "• neutral"
+                ? "text-emerald-400"
+                : "text-amber-400";
+            return (
+              <div>
+                <div className="text-slate-500">zone</div>
+                <div className={color}>{zone ?? "—"}</div>
+              </div>
+            );
+          })()}
+        </div>
       </section>
     </aside>
   );

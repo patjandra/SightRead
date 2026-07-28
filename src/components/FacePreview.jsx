@@ -90,7 +90,7 @@ export default function FacePreview({ landmarksRef, active, framingOk = true }) 
       ref={canvasRef}
       width={220}
       height={165}
-      className="w-full rounded border border-gray-700"
+      className="block mx-auto w-full max-w-[150px] rounded-lg border border-slate-700"
     />
   );
 }

@@ -40,8 +40,13 @@ export default function PDFViewer({ pdfUrl, zoom, scrollContainerRef }) {
 
   if (!pdfUrl) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-100 text-gray-400 text-sm">
-        Upload a PDF to get started.
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-3">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+        </svg>
+        <p className="text-sm font-medium text-slate-500">No sheet music loaded</p>
+        <p className="text-xs text-slate-400">Upload a PDF from the panel to get started.</p>
       </div>
     );
   }
@@ -53,7 +58,7 @@ export default function PDFViewer({ pdfUrl, zoom, scrollContainerRef }) {
   return (
     <div
       ref={scrollContainerRef}
-      className="flex-1 overflow-y-auto bg-gray-200"
+      className="sr-scroll flex-1 overflow-y-auto bg-slate-200"
       style={{ scrollBehavior: "auto" }}
     >
       {loadError && (
