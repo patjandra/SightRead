@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { pdfjs } from "react-pdf";
 import App from "./App.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import "./index.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -11,6 +12,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
