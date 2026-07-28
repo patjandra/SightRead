@@ -235,6 +235,7 @@ export default function App() {
           pdfUrl={pdfUrl}
           zoom={zoom}
           scrollContainerRef={scrollContainerRef}
+          onPdfUpload={handlePdfUpload}
         />
       </div>
     </div>

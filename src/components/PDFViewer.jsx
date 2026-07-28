@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -24,10 +24,13 @@ const BASE_RENDER_SCALE = 2;
  *   pdfUrl          - object URL string or null
  *   zoom            - user scale factor (e.g. 1.0 = 100%)
  *   scrollContainerRef - ref forwarded to the scrollable container
+ *   onPdfUpload     - (file) => void, called when a PDF is chosen or dropped
  */
-export default function PDFViewer({ pdfUrl, zoom, scrollContainerRef }) {
+export default function PDFViewer({ pdfUrl, zoom, scrollContainerRef, onPdfUpload }) {
   const [numPages, setNumPages] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
 
   const onDocumentLoadSuccess = useCallback(({ numPages }) => {
     setNumPages(numPages);
@@ -38,15 +41,71 @@ export default function PDFViewer({ pdfUrl, zoom, scrollContainerRef }) {
     setLoadError("Failed to load PDF: " + err.message);
   }, []);
 
+  const acceptFile = useCallback(
+    (file) => {
+      if (!file) return;
+      const isPdf =
+        file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf");
+      if (isPdf) onPdfUpload?.(file);
+    },
+    [onPdfUpload]
+  );
+
+  const handleDrop = useCallback(
+    (e) => {
+      e.preventDefault();
+      setDragActive(false);
+      acceptFile(e.dataTransfer.files?.[0]);
+    },
+    [acceptFile]
+  );
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    setDragActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    setDragActive(false);
+  }, []);
+
   if (!pdfUrl) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-3">
-        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <div
+        className={`flex-1 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors ${
+          dragActive
+            ? "bg-indigo-50 text-indigo-500"
+            : "bg-slate-100 text-slate-400 hover:bg-slate-50"
+        }`}
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            acceptFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <path d="M14 2v6h6" />
+          <path d="M12 18v-6" />
+          <path d="m9 15 3-3 3 3" />
         </svg>
-        <p className="text-sm font-medium text-slate-500">No sheet music loaded</p>
-        <p className="text-xs text-slate-400">Upload a PDF from the panel to get started.</p>
+        <p className="text-sm font-medium text-slate-500 pointer-events-none">
+          {dragActive ? "Drop your PDF to open it" : "No sheet music loaded"}
+        </p>
+        <p className="text-xs text-slate-400 pointer-events-none">
+          Click anywhere or drag a PDF here to get started.
+        </p>
       </div>
     );
   }
