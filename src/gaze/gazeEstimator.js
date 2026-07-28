@@ -130,6 +130,16 @@ export function estimateGaze(result) {
 
   const rawY = 0.5 + vertical * 0.5 * AMPLIFICATION;
 
+  // Horizontal deviation magnitude: ~0 when looking straight ahead, growing
+  // toward ~1 as the eyes turn to either side. Calibration uses this to reject
+  // frames where the user isn't actually looking at the (centered) dot.
+  const sideGaze =
+    (get("eyeLookInLeft") +
+      get("eyeLookOutLeft") +
+      get("eyeLookInRight") +
+      get("eyeLookOutRight")) /
+    2;
+
   if (!isFinite(rawY) || isNaN(rawY)) {
     return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
   }
@@ -139,5 +149,6 @@ export function estimateGaze(result) {
     confidence: 1,
     hasFace: true,
     hint: null,
+    sideGaze,
   };
 }
