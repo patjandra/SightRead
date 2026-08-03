@@ -13,19 +13,31 @@
  *   RELATIVE TO THE HEAD, so they respond to where the eyes point and stay
  *   largely stable as the head tilts — exactly what we want for gaze scrolling.
  *
- * Vertical gaze signal:
- *   lookUp   = mean(eyeLookUpLeft,   eyeLookUpRight)     ∈ [0,1]
- *   lookDown = mean(eyeLookDownLeft, eyeLookDownRight)   ∈ [0,1]
- *   vertical = lookDown - lookUp                         ∈ [-1,1]  (+ = down)
- *   rawY     = 0.5 + vertical * 0.5 * AMPLIFICATION      (clamped [0,1])
+ * Vertical gaze signal (blended head + eyes):
+ *   eyeVertical  = mean(eyeLookDown) - mean(eyeLookUp)   ∈ [-1,1]  (+ = down)
+ *   headVertical = head pitch from landmark depth         ≈ sin(pitch), (+ = down)
+ *   vertical     = eyeVertical * EYE_GAIN + headVertical * HEAD_GAIN
+ *   rawY         = 0.5 + vertical * 0.5                   (clamped [0,1])
  *
- *   Calibration (top/center/bottom) later maps this raw value onto the screen,
- *   so AMPLIFICATION only needs to give enough separation to calibrate against.
+ *   Why blend in head pitch: the eyeLookUp/Down coefficients move only a little
+ *   for the ~10-15° of eyeball rotation across a nearby screen, so on their own
+ *   they barely separate the top and bottom of the page — calibration couldn't
+ *   get a usable range. People also naturally tilt their head toward what they
+ *   read, and head-relative blendshapes cancel that out, throwing away real
+ *   signal. Adding a head-pitch term (from the forehead-vs-chin depth, which is
+ *   NOT head-relative) makes looking up/down produce a strong signal whether the
+ *   user moves their eyes, their head, or both. Calibration then normalizes the
+ *   combined value onto the screen.
  */
 
-// Amplify the raw up/down difference so ordinary reading gaze (which rarely
-// drives the blendshapes to their extremes) produces a usable spread.
-const AMPLIFICATION = 1.6;
+// Relative weights of the two contributions. The eye term is small in magnitude
+// (~±0.1) while the head-pitch term is larger (~±0.5 of sin(pitch)), so the eye
+// term is given a higher gain to keep both meaningfully in play — a user can
+// scroll with their eyes alone or with a natural head tilt. Calibration
+// normalizes the sum, so only their RATIO (feel) and the signal-to-noise ratio
+// matter, not the absolute scale.
+const EYE_GAIN  = 4.0;
+const HEAD_GAIN = 2.0;
 
 // Blink/closed-eye cutoff: eyeBlink coefficients approach 1 when the lid closes.
 // Above this the eye gaze reading is unreliable, so we drop confidence to 0 and
@@ -87,6 +99,36 @@ function assessFraming(lm) {
   return null;
 }
 
+// Landmark indices on the 478-point mesh for the vertical face axis.
+const FOREHEAD_IDX = 10;
+const CHIN_IDX = 152;
+
+/**
+ * Head pitch as a signed, distance-invariant scalar, from the depth difference
+ * between the forehead and chin landmarks.
+ *
+ * MediaPipe's landmark z grows more negative closer to the camera. When the head
+ * tilts DOWN (nods), the forehead rotates toward the camera and the chin away,
+ * so (z_chin − z_forehead) becomes positive. Dividing by the 3D forehead→chin
+ * distance normalizes for how close the user is, giving roughly sin(pitch).
+ *
+ * Unlike the eyeLook blendshapes (which are head-relative), this term captures
+ * actual head movement — intentionally, so a natural head tilt contributes.
+ *
+ * @param {Array<{x:number,y:number,z:number}>} lm - face landmarks
+ * @returns {number} ~sin(pitch); positive looking down, negative looking up
+ */
+function headPitchDown(lm) {
+  const forehead = lm[FOREHEAD_IDX];
+  const chin = lm[CHIN_IDX];
+  if (!forehead || !chin) return 0;
+  const dx = chin.x - forehead.x;
+  const dy = chin.y - forehead.y;
+  const dz = chin.z - forehead.z;
+  const dist = Math.hypot(dx, dy, dz) || 1e-6;
+  return dz / dist;
+}
+
 /**
  * @param {object|null} result - detectForVideo result from FaceLandmarker
  * @returns {{ rawY: number, confidence: number, hasFace: boolean, hint: string|null }}
@@ -125,10 +167,15 @@ export function estimateGaze(result) {
   const lookUp   = (get("eyeLookUpLeft")   + get("eyeLookUpRight"))   / 2;
   const lookDown = (get("eyeLookDownLeft") + get("eyeLookDownRight")) / 2;
 
-  // Signed vertical gaze: positive → looking down, negative → looking up.
-  const vertical = lookDown - lookUp;
+  // Two signed vertical contributions, both positive when looking DOWN:
+  //   eyeVertical  — eyeball rotation relative to the head (small)
+  //   headVertical — head pitch, captures a natural head tilt (larger)
+  const eyeVertical  = lookDown - lookUp;
+  const headVertical = headPitchDown(lm);
 
-  const rawY = 0.5 + vertical * 0.5 * AMPLIFICATION;
+  const vertical = eyeVertical * EYE_GAIN + headVertical * HEAD_GAIN;
+
+  const rawY = 0.5 + vertical * 0.5;
 
   // Horizontal deviation magnitude: ~0 when looking straight ahead, growing
   // toward ~1 as the eyes turn to either side. Calibration uses this to reject
@@ -145,10 +192,17 @@ export function estimateGaze(result) {
   }
 
   return {
-    rawY: Math.min(1, Math.max(0, rawY)),
+    // NOT clamped to [0,1] on purpose: calibration maps whatever range this
+    // signal actually spans onto the screen, so clamping here would saturate a
+    // strong reading (pinning every gaze to the rail) and flatten the range.
+    rawY,
     confidence: 1,
     hasFace: true,
     hint: null,
     sideGaze,
+    // Surfaced for the calibration readout so the eye vs. head contributions
+    // are visible (and verifiable) while tuning.
+    eyeVertical,
+    headVertical,
   };
 }

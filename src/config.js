@@ -9,13 +9,16 @@
 // recalibrate instead of scrolling with stale data.
 //
 //   v1 — iris-vs-corner geometry
-//   v2 — MediaPipe eye blendshapes (current)
-export const CALIBRATION_VERSION = 2;
+//   v2 — MediaPipe eye blendshapes
+//   v3 — blendshapes with higher amplification
+//   v4 — eye blendshapes blended with head pitch
+//   v5 — same blend, unclamped raw signal + rebalanced gains (current)
+export const CALIBRATION_VERSION = 5;
 
 // Gaze-zone thresholds on the calibrated [0,1] value. Shared by the scroll
 // controller (which acts on them) and the debug readout (which displays them).
-// Zone sizes: up = UP_THRESHOLD, neutral = DOWN − UP, down = 1 − DOWN.
-// The band sits below 0.5 so a slightly-high neutral gaze doesn't over-trigger
-// "up", and "down" stays easy to reach.
-export const SCROLL_UP_THRESHOLD = 0.28;   // calibratedY below this → scroll up
-export const SCROLL_DOWN_THRESHOLD = 0.58; // calibratedY above this → scroll down
+// Intentionally asymmetric: looking down drives the eye blendshapes strongly
+// while looking up responds weakly, so the up zone is widened (higher up
+// threshold) to make scrolling up as easy to trigger as scrolling down.
+export const SCROLL_UP_THRESHOLD = 0.47;   // calibratedY below this → scroll up
+export const SCROLL_DOWN_THRESHOLD = 0.62; // calibratedY above this → scroll down

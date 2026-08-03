@@ -11,22 +11,28 @@ const COUNTDOWN_N  = 3;
 const COUNTDOWN_MS = 800;
 
 // ─── Robustness thresholds ───────────────────────────────────────────────────
+// The validation is signal-to-noise based rather than fixed-magnitude: it asks
+// "did the gaze move clearly more than it jitters?" instead of "did it move at
+// least X." That adapts to whatever scale the blended signal actually has, so a
+// real calibration isn't rejected just because the raw numbers are small.
+//
 // Minimum on-target samples needed to trust a step. Frames are only counted
-// when the face is detected, confident, AND looking roughly straight at the
-// (horizontally centered) dot — so too few means the user wasn't looking there.
-const MIN_SAMPLES = 10;
-// Max standard deviation of a step's samples. A steady fixation is tight; a
-// wandering or interrupted gaze spreads out and is rejected.
-const MAX_STDDEV = 0.10;
-// Reject frames where the eyes are turned to the side instead of at the dot.
-const SIDE_GAZE_MAX = 0.35;
-// Adjacent calibration points must be at least this far apart, in order
-// (top < center < bottom), or the mapping can't separate the zones.
-const MIN_SEPARATION = 0.05;
-// The full top→bottom gaze range must span at least this much. This is the key
-// guard against "calibrating" without actually moving your eyes to the dots: if
-// you stare straight ahead the three readings barely differ and are rejected.
-const MIN_TOTAL_SPAN = 0.16;
+// when the face is detected and confident; too few means it wasn't seen enough.
+const MIN_SAMPLES = 6;
+// Reject frames where the eyes are clearly turned to the side. Looking up/down
+// at the (centered) dots can add some horizontal cross-talk, so keep this high
+// and only reject a strong sideways turn.
+const SIDE_GAZE_MAX = 0.6;
+// The top→bottom span must exceed this multiple of the measurement noise (the
+// largest per-step standard deviation). This is the core "did your gaze really
+// move" guard, expressed relative to jitter so it scales with the signal.
+const MIN_SNR = 3;
+// A tiny absolute floor on the top→bottom span, so a degenerate near-flat signal
+// with near-zero noise can't sneak past the SNR check.
+const MIN_TOTAL_SPAN = 0.03;
+// Adjacent points must land in order (top < center < bottom) with at least this
+// much gap, or a step was mis-captured and the mapping can't separate the zones.
+const MIN_SEPARATION = 0.01;
 
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -65,6 +71,8 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
   const failModeRef     = useRef("step");
   // Last framing problem seen while collecting, for a targeted failure message.
   const framingHintRef  = useRef(null);
+  // Per-step sample spread (stddev), keyed by step, for the final SNR check.
+  const noiseRef        = useRef({});
 
   const step = STEPS[stepIndex];
 
@@ -163,15 +171,10 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
       return;
     }
 
-    // Unsteady gaze (glancing around) spreads the samples out — reject it so a
-    // noisy reading can't distort the mapping.
-    if (stddev(samples) > MAX_STDDEV) {
-      failStep("Try to hold your gaze still on the dot.");
-      return;
-    }
-
-    // Median is robust to the occasional stray frame.
+    // Median is robust to the occasional stray frame; the spread is the noise
+    // floor the final span is later judged against.
     const value = median(samples);
+    noiseRef.current[step.key] = stddev(samples);
 
     const newPoints = { ...points, [step.key]: value };
     setPoints(newPoints);
@@ -182,22 +185,33 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
       return;
     }
 
-    // Final consistency check across all three points. Two conditions:
+    // Final consistency check across all three points:
     //  1. They must increase in order (top < center < bottom) with separation —
     //     otherwise a step was mis-captured (e.g. looked the wrong way).
-    //  2. The overall top→bottom span must be substantial — otherwise the eyes
-    //     never really travelled between the dots (e.g. stared straight ahead),
-    //     and the resulting mapping would make tiny gaze shifts scroll wildly.
+    //  2. The top→bottom span must clearly beat the jitter (SNR) AND clear a
+    //     tiny absolute floor — otherwise the gaze never really travelled
+    //     between the dots and the mapping would amplify noise into wild scroll.
     // Either failure means redo the whole calibration.
     const { top, center, bottom } = newPoints;
+    const span = bottom - top;
+    const noise = Math.max(
+      noiseRef.current.top ?? 0,
+      noiseRef.current.center ?? 0,
+      noiseRef.current.bottom ?? 0,
+      1e-4 // avoid divide-by-zero / infinite SNR on a perfectly flat capture
+    );
+
     const ordered =
       top + MIN_SEPARATION <= center && center + MIN_SEPARATION <= bottom;
-    const enoughSpan = bottom - top >= MIN_TOTAL_SPAN;
-    if (!ordered || !enoughSpan) {
+    const enoughSignal = span >= MIN_SNR * noise && span >= MIN_TOTAL_SPAN;
+    if (!ordered || !enoughSignal) {
+      const readings = `(top ${top.toFixed(2)}, center ${center.toFixed(
+        2
+      )}, bottom ${bottom.toFixed(2)})`;
       failStep(
         !ordered
-          ? "Those readings didn't line up. Redo it and look straight at each dot in turn."
-          : "Your gaze barely moved. Look up at the top dot and down at the bottom dot.",
+          ? `Those readings didn't line up ${readings}. Redo it and look straight at each dot in turn.`
+          : `Your gaze barely moved ${readings}. Really look up at the top dot and down at the bottom dot — moving your head is fine.`,
         "all"
       );
       return;
@@ -211,6 +225,7 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
   function retry() {
     if (failModeRef.current === "all") {
       setPoints({});
+      noiseRef.current = {};
       if (stepIndex === 0) {
         startStep();
       } else {
@@ -357,6 +372,9 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
                   ? "Hold still while the ring fills"
                   : "Captured!"}
               </p>
+              <p className="text-gray-500 text-xs mt-1.5 leading-snug">
+                Look right at the dot — moving your head is fine.
+              </p>
               {framingProblem && (
                 <p className="mt-2 flex items-center justify-center gap-1.5 text-amber-400 text-xs font-semibold leading-snug">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
@@ -370,6 +388,23 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
             </>
           )}
         </div>
+      </div>
+
+      {/* Live readout — helps verify the gaze signal while calibrating */}
+      <div className="absolute bottom-4 left-4 text-[11px] font-mono text-gray-500 leading-relaxed pointer-events-none">
+        <div>
+          face:{" "}
+          <span className={gazeData.hasFace ? "text-green-400" : "text-red-400"}>
+            {gazeData.hasFace ? "yes" : "no"}
+          </span>
+        </div>
+        <div>rawY: <span className="text-gray-300">{gazeData.rawY.toFixed(3)}</span></div>
+        <div>eye: <span className="text-gray-300">{(gazeData.eyeVertical ?? 0).toFixed(3)}</span></div>
+        <div>head: <span className="text-gray-300">{(gazeData.headVertical ?? 0).toFixed(3)}</span></div>
+        <div>side: <span className="text-gray-300">{(gazeData.sideGaze ?? 0).toFixed(3)}</span></div>
+        {phase === "collecting" && (
+          <div>samples: <span className="text-gray-300">{samplesRef.current.length}</span></div>
+        )}
       </div>
 
       {/* Cancel */}
