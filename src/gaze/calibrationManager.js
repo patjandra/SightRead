@@ -1,60 +1,9 @@
 import { CALIBRATION_VERSION } from "../config.js";
 
-const STORAGE_KEY = "sightread_profiles";
-const SELECTED_KEY = "sightread_selected_profile";
-
-// ─── Profile CRUD ─────────────────────────────────────────────────────────────
-
-export function loadProfiles() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveProfiles(profiles) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
-}
-
-export function loadSelectedProfileId() {
-  return localStorage.getItem(SELECTED_KEY) || null;
-}
-
-export function saveSelectedProfileId(id) {
-  localStorage.setItem(SELECTED_KEY, id);
-}
-
-export function createProfile(name, points) {
-  const profile = {
-    id: Date.now().toString(),
-    name: name.trim() || "Default",
-    createdAt: new Date().toISOString(),
-    points,
-    // Only meaningful once points exist; stamp the version they were made with.
-    calibrationVersion: points ? CALIBRATION_VERSION : null,
-  };
-  const existing = loadProfiles();
-  saveProfiles([...existing, profile]);
-  return profile;
-}
-
-export function updateProfile(id, points) {
-  const profiles = loadProfiles();
-  const updated = profiles.map((p) =>
-    p.id === id
-      ? {
-          ...p,
-          points,
-          calibrationVersion: CALIBRATION_VERSION,
-          updatedAt: new Date().toISOString(),
-        }
-      : p
-  );
-  saveProfiles(updated);
-  return updated.find((p) => p.id === id);
-}
+// Profile persistence (create/update/delete, storage) lives in profileStore.js.
+// This module holds only the pure, storage-free calibration logic: deciding
+// whether a saved profile is usable and mapping a raw gaze value onto the
+// screen with its calibration points.
 
 /**
  * Whether a profile is calibrated FOR THE CURRENT gaze algorithm. Points saved
@@ -78,16 +27,6 @@ export function isProfileCalibrated(profile) {
  */
 export function isCalibrationStale(profile) {
   return !!profile?.points && profile.calibrationVersion !== CALIBRATION_VERSION;
-}
-
-export function deleteProfile(id) {
-  const profiles = loadProfiles().filter((p) => p.id !== id);
-  saveProfiles(profiles);
-  const selected = loadSelectedProfileId();
-  if (selected === id) {
-    const next = profiles[0];
-    saveSelectedProfileId(next ? next.id : null);
-  }
 }
 
 // ─── Calibration mapping ───────────────────────────────────────────────────────
