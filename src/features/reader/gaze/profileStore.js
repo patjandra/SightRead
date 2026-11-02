@@ -194,6 +194,14 @@ export async function getAllRecords() {
   return records.map(normalize).sort(byCreated);
 }
 
+/** One record by id, including a tombstone. For the sync layer. */
+export async function getRecord(id) {
+  const db = await openDB();
+  await ensureMigrated(db);
+  const record = await reqDone(store(db, PROFILE_STORE, "readonly").get(id));
+  return record ? normalize(record) : undefined;
+}
+
 /** Profiles to show: everything except tombstones, oldest first. */
 export async function getAllProfiles() {
   return (await getAllRecords()).filter((p) => !p.deletedAt);
