@@ -230,3 +230,31 @@ describe("limits and validation", () => {
     expect((await list(alice))[0].deletedAt).toBeNull();
   });
 });
+
+describe("tombstone growth", () => {
+  const uuid = (i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+
+  it("bounds the total rows a user can accumulate by create-then-delete", async () => {
+    for (let i = 0; i < MAX_PROFILES_PER_USER * 3; i++) {
+      await put(alice, uuid(i), profileBody({ name: `p${i}` }));
+      await call(alice, `/${uuid(i)}`, { method: "DELETE" });
+    }
+    const rows = db.raw
+      .prepare("SELECT COUNT(*) AS n FROM calibration_profiles WHERE user_id = ?")
+      .get(alice.id).n;
+    expect(rows).toBeLessThanOrEqual(MAX_PROFILES_PER_USER * 2);
+  });
+
+  it("does not let concurrent first writes exceed the cap", async () => {
+    for (let i = 0; i < MAX_PROFILES_PER_USER - 1; i++) {
+      await put(alice, uuid(i), profileBody({ name: `p${i}` }));
+    }
+    await Promise.all([
+      put(alice, uuid(1001), profileBody()),
+      put(alice, uuid(1002), profileBody()),
+      put(alice, uuid(1003), profileBody()),
+    ]);
+    const live = (await list(alice)).filter((p) => !p.deletedAt);
+    expect(live.length).toBeLessThanOrEqual(MAX_PROFILES_PER_USER);
+  });
+});

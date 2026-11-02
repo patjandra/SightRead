@@ -5,6 +5,10 @@
 import { ApiError } from "../errors.js";
 
 export const MAX_PROFILES_PER_USER = 50;
+// Tombstones are kept so other devices learn of deletes, but they count toward
+// a total row cap so create/delete churn can't grow the table without bound.
+export const MAX_ROWS_PER_USER = MAX_PROFILES_PER_USER * 2;
+const TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_NAME_LENGTH = 100;
 const MAX_POINT_MAGNITUDE = 100;
 // A client clock this far ahead is rejected, so a skewed device can't pin a
@@ -113,27 +117,33 @@ export async function upsertProfile(db, userId, id, input) {
   const existing = await getRow(db, userId, id);
 
   if (!existing) {
-    const { n } = await db
-      .prepare("SELECT COUNT(*) AS n FROM calibration_profiles WHERE user_id = ? AND deleted_at IS NULL")
-      .bind(userId)
-      .first();
-    if (n >= MAX_PROFILES_PER_USER) {
-      throw new ApiError(409, "profile_limit", `You can save up to ${MAX_PROFILES_PER_USER} profiles.`);
-    }
-    // DO NOTHING so two simultaneous first writes of the same id can't error.
+    // Expired tombstones free up room (a device offline longer than this must
+    // re-sync from scratch anyway).
+    await db
+      .prepare("DELETE FROM calibration_profiles WHERE user_id = ? AND deleted_at IS NOT NULL AND deleted_at < ?")
+      .bind(userId, new Date(Date.now() - TOMBSTONE_TTL_MS).toISOString())
+      .run();
+    // One statement checks both caps and inserts, so concurrent first writes
+    // can't both pass the check. DO NOTHING covers a duplicate of the same id.
     await db
       .prepare(
         `INSERT INTO calibration_profiles
            (user_id, id, name, point_top, point_center, point_bottom, calibration_version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE (SELECT COUNT(*) FROM calibration_profiles WHERE user_id = ? AND deleted_at IS NULL) < ?
+            AND (SELECT COUNT(*) FROM calibration_profiles WHERE user_id = ?) < ?
          ON CONFLICT(user_id, id) DO NOTHING`
       )
       .bind(
         userId, id, input.name,
         input.points?.top ?? null, input.points?.center ?? null, input.points?.bottom ?? null,
-        input.calibrationVersion, input.createdAt, input.updatedAt
+        input.calibrationVersion, input.createdAt, input.updatedAt,
+        userId, MAX_PROFILES_PER_USER, userId, MAX_ROWS_PER_USER
       )
       .run();
+    if (!(await getRow(db, userId, id))) {
+      throw new ApiError(409, "profile_limit", `You can save up to ${MAX_PROFILES_PER_USER} profiles.`);
+    }
   } else {
     // Conditional update: stays correct even if another write lands in between.
     await db

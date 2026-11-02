@@ -124,6 +124,68 @@ describe("auth routes", () => {
   });
 });
 
+describe("INSECURE_DEV_COOKIES (Safari on http://localhost)", () => {
+  // The app is exercised through a real localhost URL here, since the flag only
+  // applies to local hosts.
+  function localSetup(extraEnv) {
+    const db = sqliteD1();
+    const app = createApp({ googleKeySet: keys.publicKey });
+    const origin = "http://localhost:5173";
+    const call = (path, { method = "GET", cookie, body } = {}) =>
+      app.request(
+        `http://localhost:5173${path}`,
+        {
+          method,
+          headers: {
+            ...(method !== "GET" && { Origin: origin, "X-Requested-With": "sightread", "Content-Type": "application/json" }),
+            ...(cookie && { Cookie: cookie }),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        },
+        { ...env(db), ...extraEnv }
+      );
+    return { call };
+  }
+
+  it("issues plain, non-Secure cookies on localhost so Safari keeps them", async () => {
+    const { call } = localSetup({ INSECURE_DEV_COOKIES: "true" });
+    const res = await call("/api/auth/nonce");
+    const cookie = res.headers.getSetCookie()[0];
+    expect(cookie).toMatch(/^sr_nonce=/);
+    expect(cookie).not.toMatch(/Secure/i);
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Lax/i);
+  });
+
+  it("completes a full sign-in and session round trip with those cookies", async () => {
+    const { call } = localSetup({ INSECURE_DEV_COOKIES: "true" });
+    const nonceRes = await call("/api/auth/nonce");
+    const { nonce } = await nonceRes.json();
+    const credential = await makeIdToken(keys.privateKey, {}, { nonce });
+    const signed = await call("/api/auth/google", { method: "POST", cookie: cookiesFrom(nonceRes), body: { credential } });
+    expect(signed.status).toBe(200);
+    expect(signed.headers.getSetCookie().find((c) => c.startsWith("sr_session="))).toBeTruthy();
+
+    const me = await call("/api/auth/me", { cookie: cookiesFrom(signed) });
+    expect((await me.json()).user.email).toBe("ada@example.com");
+  });
+
+  it("is ignored for any non-local host, even if the flag is set", async () => {
+    const { call } = setup({ INSECURE_DEV_COOKIES: "true" }); // https://sightread.test
+    const res = await call("/api/auth/nonce");
+    const cookie = res.headers.getSetCookie()[0];
+    expect(cookie).toMatch(/^__Host-sr_nonce=/);
+    expect(cookie).toMatch(/Secure/i);
+  });
+
+  it("stays hardened on localhost when the flag is not set", async () => {
+    const { call } = localSetup({});
+    const cookie = (await call("/api/auth/nonce")).headers.getSetCookie()[0];
+    expect(cookie).toMatch(/^__Host-sr_nonce=/);
+    expect(cookie).toMatch(/Secure/i);
+  });
+});
+
 describe("csrf protection", () => {
   it("rejects a POST without the custom header", async () => {
     const { call } = setup();

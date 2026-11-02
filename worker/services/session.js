@@ -3,6 +3,8 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 
 // hono's `prefix: "host"` produces the `__Host-` cookie prefix, which browsers
 // only accept when the cookie is Secure, Path=/ and has no Domain attribute.
+// Safari won't store Secure cookies over plain http://localhost (Chrome will),
+// so local dev can opt out; see cookieSettings().
 const SESSION_COOKIE = "sr_session";
 const NONCE_COOKIE = "sr_nonce";
 
@@ -13,7 +15,20 @@ export const SESSION_TTL_SEC = 30 * DAY;
 const REFRESH_AFTER_SEC = 1 * DAY;
 const NONCE_TTL_SEC = 5 * 60;
 
-const baseCookie = { prefix: "host", httpOnly: true, secure: true, sameSite: "Lax", path: "/" };
+const hardenedCookie = { prefix: "host", httpOnly: true, secure: true, sameSite: "Lax", path: "/" };
+const devCookie = { httpOnly: true, secure: false, sameSite: "Lax", path: "/" };
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Cookie attributes for this request. Always the hardened `__Host-` + Secure
+ * set, unless INSECURE_DEV_COOKIES=true AND the request is to a local host, so
+ * the flag is inert if it is ever set outside local development.
+ */
+function cookieSettings(c) {
+  const local = LOCAL_HOSTS.has(new URL(c.req.url).hostname);
+  return c.env.INSECURE_DEV_COOKIES === "true" && local ? devCookie : hardenedCookie;
+}
 
 const MIN_SECRET_LENGTH = 32;
 
@@ -51,26 +66,26 @@ export async function verifySession(secret, token, now = Date.now()) {
 }
 
 export function readSessionCookie(c) {
-  return getCookie(c, SESSION_COOKIE, "host");
+  return getCookie(c, SESSION_COOKIE, cookieSettings(c).prefix);
 }
 
 export async function writeSessionCookie(c, userId) {
   const token = await signSession(c.env.SESSION_SECRET, userId);
-  setCookie(c, SESSION_COOKIE, token, { ...baseCookie, maxAge: SESSION_TTL_SEC });
+  setCookie(c, SESSION_COOKIE, token, { ...cookieSettings(c), maxAge: SESSION_TTL_SEC });
 }
 
 export function clearSessionCookie(c) {
-  deleteCookie(c, SESSION_COOKIE, baseCookie);
+  deleteCookie(c, SESSION_COOKIE, cookieSettings(c));
 }
 
 export function readNonceCookie(c) {
-  return getCookie(c, NONCE_COOKIE, "host");
+  return getCookie(c, NONCE_COOKIE, cookieSettings(c).prefix);
 }
 
 export function writeNonceCookie(c, nonce) {
-  setCookie(c, NONCE_COOKIE, nonce, { ...baseCookie, maxAge: NONCE_TTL_SEC });
+  setCookie(c, NONCE_COOKIE, nonce, { ...cookieSettings(c), maxAge: NONCE_TTL_SEC });
 }
 
 export function clearNonceCookie(c) {
-  deleteCookie(c, NONCE_COOKIE, baseCookie);
+  deleteCookie(c, NONCE_COOKIE, cookieSettings(c));
 }
