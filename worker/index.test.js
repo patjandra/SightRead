@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createApp } from "./index.js";
-import { ORIGIN, env, fakeDb, makeGoogleKeys, makeIdToken } from "./testUtils.js";
+import { CLIENT_ID, ORIGIN, env, fakeDb, makeGoogleKeys, makeIdToken } from "./testUtils.js";
 
 let keys;
 beforeAll(async () => {
@@ -56,7 +56,9 @@ describe("auth routes", () => {
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).toMatch(/Secure/i);
     expect(setCookie).toMatch(/SameSite=Lax/i);
-    expect((await res.json()).nonce).toBeTruthy();
+    const body = await res.json();
+    expect(body.nonce).toBeTruthy();
+    expect(body.clientId).toBe(CLIENT_ID);
   });
 
   it("creates a user and a session on first sign-in", async () => {

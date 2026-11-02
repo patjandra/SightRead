@@ -22,14 +22,15 @@ function randomNonce() {
     .replace(/=+$/, "");
 }
 
-// Issue a one-time nonce. The browser passes it to Google, Google embeds it in
+// Issue a one-time nonce (and the public Google client ID, so the browser needs
+// no per-environment build setting). The browser passes it to Google, Google embeds it in
 // the ID token, and /google checks it against this cookie, so a stolen token
 // can't be replayed from another browser.
 auth.get("/nonce", (c) => {
   const nonce = randomNonce();
   writeNonceCookie(c, nonce);
   c.header("Cache-Control", "no-store");
-  return c.json({ nonce });
+  return c.json({ nonce, clientId: c.env.GOOGLE_CLIENT_ID });
 });
 
 auth.post("/google", async (c) => {

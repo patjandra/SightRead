@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import ProfileSelector from "./ProfileSelector.jsx";
 import FacePreview from "./FacePreview.jsx";
+import AccountSection from "../../auth/AccountSection.jsx";
 import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
 import {
   isProfileCalibrated,
@@ -399,6 +400,8 @@ export default function ControlPanel({
           })()}
         </div>
       </section>
+
+      <AccountSection />
     </aside>
   );
 }
