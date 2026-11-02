@@ -1,5 +1,5 @@
-import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "./useAuth.js";
 
 // Shared circle for the signed-in avatar and the guest placeholder.
@@ -21,8 +21,17 @@ function GuestAvatar() {
 
 /** Account controls for the side panel: sign in (guest) or identity + sign out. */
 export default function AccountSection() {
-  const { status, user, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { status, user, signOut, openSignIn } = useAuth();
+  const [signOutError, setSignOutError] = useState(null);
+
+  async function handleSignOut() {
+    setSignOutError(null);
+    try {
+      await signOut();
+    } catch {
+      setSignOutError("Couldn't sign out. Please try again.");
+    }
+  }
 
   if (status === "loading") return null;
 
@@ -43,11 +52,12 @@ export default function AccountSection() {
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium truncate">{user.name || user.email}</p>
             <button
-              onClick={signOut}
+              onClick={handleSignOut}
               className="text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
             >
               Sign out
             </button>
+            {signOutError && <p className="text-[11px] text-red-400">{signOutError}</p>}
           </div>
         </div>
       ) : (
@@ -56,7 +66,7 @@ export default function AccountSection() {
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium truncate">Guest</p>
             <button
-              onClick={() => navigate("/signin")}
+              onClick={openSignIn}
               className="text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
             >
               Sign in

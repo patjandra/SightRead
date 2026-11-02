@@ -20,6 +20,7 @@ vi.mock("./GoogleSignInButton.jsx", () => ({
 import * as client from "./authClient.js";
 import AuthProvider from "./AuthProvider.jsx";
 import { useAuth } from "./useAuth.js";
+import { useOnSignOut } from "./useOnSignOut.js";
 
 const USER = { id: "u1", email: "ada@example.com", name: "Ada", picture: null };
 
@@ -117,6 +118,35 @@ describe("AuthProvider / requireAuth", () => {
     expect(action).not.toHaveBeenCalled();
   });
 
+  it("openSignIn shows the prompt without navigating and without a pending action", async () => {
+    client.getMe.mockResolvedValue({ user: null });
+    client.signInWithGoogle.mockResolvedValue({ user: USER });
+    function OpenHarness() {
+      const { user, openSignIn } = useAuth();
+      return (
+        <>
+          <p data-testid="u">{user?.email ?? "none"}</p>
+          <button onClick={openSignIn}>open</button>
+        </>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider>
+          <OpenHarness />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(client.getMe).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText("open"));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Sign in to SightRead");
+
+    fireEvent.click(screen.getByText("google"));
+    await waitFor(() => expect(screen.getByTestId("u")).toHaveTextContent("ada@example.com"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("signOut returns to guest", async () => {
     client.getMe.mockResolvedValue({ user: USER });
     client.signOut.mockResolvedValue(null);
@@ -139,5 +169,72 @@ describe("AuthProvider / requireAuth", () => {
     await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("signed-in"));
     fireEvent.click(screen.getByText("out"));
     await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("guest"));
+  });
+
+  it("stays signed in and rejects when sign-out fails", async () => {
+    client.getMe.mockResolvedValue({ user: USER });
+    client.signOut.mockRejectedValue(new Error("network"));
+    let result;
+    function Harness() {
+      const { status, signOut } = useAuth();
+      return (
+        <>
+          <p data-testid="s">{status}</p>
+          <button onClick={() => signOut().catch((e) => (result = e))}>out</button>
+        </>
+      );
+    }
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Harness />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("signed-in"));
+    fireEvent.click(screen.getByText("out"));
+    await waitFor(() => expect(result).toBeInstanceOf(Error));
+    expect(screen.getByTestId("s")).toHaveTextContent("signed-in");
+  });
+});
+
+describe("useOnSignOut", () => {
+  function Watcher({ onOut }) {
+    const { signOut } = useAuth();
+    useOnSignOut(onOut);
+    return <button onClick={signOut}>out</button>;
+  }
+  const mount = (onOut) =>
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Watcher onOut={onOut} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+  it("fires when a signed-in user signs out", async () => {
+    client.getMe.mockResolvedValue({ user: USER });
+    client.signOut.mockResolvedValue(null);
+    const onOut = vi.fn();
+    mount(onOut);
+    await waitFor(() => expect(client.getMe).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(onOut).not.toHaveBeenCalled(); // not on load
+
+    fireEvent.click(screen.getByText("out"));
+    await waitFor(() => expect(onOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not fire for a guest", async () => {
+    client.getMe.mockResolvedValue({ user: null });
+    client.signOut.mockResolvedValue(null);
+    const onOut = vi.fn();
+    mount(onOut);
+    await waitFor(() => expect(client.getMe).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText("out"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(onOut).not.toHaveBeenCalled();
   });
 });

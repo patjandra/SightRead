@@ -7,6 +7,7 @@ import PDFViewer from "./components/PDFViewer.jsx";
 import CalibrationScreen from "./components/CalibrationScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
 import TrackingWarning from "./components/TrackingWarning.jsx";
+import { useOnSignOut } from "../auth/useOnSignOut.js";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
@@ -70,6 +71,17 @@ export default function ReaderPage() {
   } = useGazeTracking();
 
   const [isTracking, setIsTracking] = useState(false);
+
+  // Signing out closes the open PDF (and stops tracking, which has nothing left
+  // to scroll), so nothing from the account's session lingers on screen.
+  useOnSignOut(
+    useCallback(() => {
+      setIsTracking(false);
+      if (prevPdfUrlRef.current) URL.revokeObjectURL(prevPdfUrlRef.current);
+      prevPdfUrlRef.current = null;
+      setPdfUrl(null);
+    }, [])
+  );
 
   // Tracking requires a profile calibrated for the CURRENT algorithm AND an
   // uploaded PDF — there's nothing to scroll until a file is loaded.

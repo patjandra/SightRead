@@ -11,12 +11,14 @@ export const AuthContext = createContext(null);
  *
  * `requireAuth(action)` is the save gate: signed-in users run `action`
  * immediately; guests get the sign-in prompt, and `action` runs once they have
- * signed in. Dismissing the prompt discards it.
+ * signed in. Dismissing the prompt discards it. `openSignIn()` shows the same
+ * prompt without a pending action.
  */
 export default function AuthProvider({ children }) {
   const [status, setStatus] = useState("loading");
   const [user, setUser] = useState(null);
-  const [promptOpen, setPromptOpen] = useState(false);
+  // null = closed; "save" = a guest tried to save; "signin" = they chose Sign in.
+  const [promptMode, setPromptMode] = useState(null);
   const pendingRef = useRef(null);
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function AuthProvider({ children }) {
 
     const pending = pendingRef.current;
     pendingRef.current = null;
-    setPromptOpen(false);
+    setPromptMode(null);
     if (pending) {
       try {
         await pending();
@@ -55,8 +57,10 @@ export default function AuthProvider({ children }) {
     return user;
   }, []);
 
+  // Only flips to guest once the server has cleared the cookie; on failure the
+  // session is still valid, so keep the UI signed in and let the caller see it.
   const signOut = useCallback(async () => {
-    await apiSignOut().catch(() => {});
+    await apiSignOut();
     setUser(null);
     setStatus("guest");
   }, []);
@@ -65,22 +69,29 @@ export default function AuthProvider({ children }) {
     (action) => {
       if (user) return action();
       pendingRef.current = action;
-      setPromptOpen(true);
+      setPromptMode("save");
     },
     [user]
   );
 
-  const closePrompt = useCallback(() => {
+  // Open the sign-in modal over the current page (no navigation, so whatever
+  // is loaded, e.g. the open PDF, stays put).
+  const openSignIn = useCallback(() => {
     pendingRef.current = null;
-    setPromptOpen(false);
+    setPromptMode("signin");
   }, []);
 
-  const value = { status, user, completeSignIn, signOut, requireAuth };
+  const closePrompt = useCallback(() => {
+    pendingRef.current = null;
+    setPromptMode(null);
+  }, []);
+
+  const value = { status, user, completeSignIn, signOut, requireAuth, openSignIn };
 
   return (
     <AuthContext.Provider value={value}>
       {children}
-      {promptOpen && <SignInPrompt onClose={closePrompt} />}
+      {promptMode && <SignInPrompt mode={promptMode} onClose={closePrompt} />}
     </AuthContext.Provider>
   );
 }

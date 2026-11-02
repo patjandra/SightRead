@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import GoogleSignInButton from "./GoogleSignInButton.jsx";
 import { useAuth } from "./useAuth.js";
 
-/** Modal shown when a guest tries to save. Rendered by AuthProvider. */
-export default function SignInPrompt({ onClose }) {
+/** Sign-in modal (save gate or Sign in button). Rendered by AuthProvider. */
+export default function SignInPrompt({ mode = "save", onClose }) {
   const { completeSignIn } = useAuth();
   const [error, setError] = useState(null);
 
@@ -36,11 +36,12 @@ export default function SignInPrompt({ onClose }) {
       >
         <div className="space-y-1">
           <h2 id="signin-prompt-title" className="text-lg font-semibold">
-            Sign in to save
+            {mode === "save" ? "Sign in to save" : "Sign in to SightRead"}
           </h2>
           <p className="text-sm text-slate-400">
-            Saving keeps your profiles and sheet music with your account so you
-            can use them on any device.
+            {mode === "save"
+              ? "Saving keeps your profiles and sheet music with your account so you can use them on any device."
+              : "Sign in to keep your profiles and sheet music with your account across devices."}
           </p>
         </div>
 
