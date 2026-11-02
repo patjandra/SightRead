@@ -1,4 +1,9 @@
 import { SignJWT, generateKeyPair } from "jose";
+import { createRequire } from "node:module";
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { signSession } from "./services/session.js";
+import { upsertGoogleUser } from "./services/users.js";
 
 export const CLIENT_ID = "test-client.apps.googleusercontent.com";
 export const SESSION_SECRET = "test-session-secret-test-session-secret";
@@ -28,38 +33,53 @@ export async function makeIdToken(privateKey, overrides = {}, claims = {}) {
     .sign(privateKey);
 }
 
-/** In-memory stand-in for the two D1 statements the users service issues. */
-export function fakeDb() {
-  const bySub = new Map();
+// Vite strips the `node:` prefix and then fails to resolve a bare `sqlite`, so
+// load the built-in through require (needs Node >= 22.13, matching CI).
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+
+const MIGRATIONS_DIR = fileURLToPath(new URL("../migrations/", import.meta.url));
+
+/**
+ * A D1-shaped wrapper over a real in-memory SQLite database with every
+ * migration applied, so tests exercise the actual SQL and schema (including
+ * foreign keys and primary keys). `raw` is the underlying DatabaseSync.
+ */
+export function sqliteD1() {
+  const raw = new DatabaseSync(":memory:");
+  for (const file of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
+    raw.exec(readFileSync(MIGRATIONS_DIR + file, "utf8"));
+  }
+  const plain = (row) => (row ? { ...row } : null);
+
   return {
-    users: bySub,
+    raw,
     prepare(sql) {
+      const stmt = raw.prepare(sql);
       return {
         bind(...args) {
           return {
             async first() {
-              if (sql.includes("INSERT INTO users")) {
-                const [id, sub, email, name, picture, createdAt, lastLoginAt] = args;
-                const existing = bySub.get(sub);
-                if (existing) {
-                  Object.assign(existing, { email, name, picture, last_login_at: lastLoginAt });
-                } else {
-                  bySub.set(sub, { id, google_sub: sub, email, name, picture, created_at: createdAt, last_login_at: lastLoginAt });
-                }
-                const u = bySub.get(sub);
-                return { id: u.id, email: u.email, name: u.name, picture: u.picture };
-              }
-              if (sql.includes("WHERE id = ?")) {
-                const u = [...bySub.values()].find((x) => x.id === args[0]);
-                return u ? { id: u.id, email: u.email, name: u.name, picture: u.picture } : null;
-              }
-              throw new Error("unexpected SQL in fakeDb: " + sql);
+              return plain(stmt.get(...args));
+            },
+            async all() {
+              return { results: stmt.all(...args).map(plain) };
+            },
+            async run() {
+              const info = stmt.run(...args);
+              return { meta: { changes: Number(info.changes) } };
             },
           };
         },
       };
     },
   };
+}
+
+/** Create a user row and a valid session cookie for them. */
+export async function makeUser(db, sub, email = `${sub}@example.com`) {
+  const user = await upsertGoogleUser(db, { sub, email, name: sub, picture: null });
+  const token = await signSession(SESSION_SECRET, user.id);
+  return { ...user, cookie: `__Host-sr_session=${token}` };
 }
 
 export function env(db) {

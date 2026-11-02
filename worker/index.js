@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { ApiError, errorBody } from "./errors.js";
 import { csrf } from "./middleware/csrf.js";
 import auth from "./routes/auth.js";
+import calibrations from "./routes/calibrations.js";
 
 // Only /api/* reaches the Worker (see `run_worker_first` in wrangler.jsonc);
 // everything else is static assets.
@@ -16,6 +17,7 @@ export function createApp({ googleKeySet } = {}) {
   });
   app.use("/api/*", csrf);
   app.route("/api/auth", auth);
+  app.route("/api/calibrations", calibrations);
 
   app.notFound((c) =>
     c.json(errorBody("not_found", "No such endpoint."), 404)

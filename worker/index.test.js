@@ -1,14 +1,16 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createApp } from "./index.js";
-import { CLIENT_ID, ORIGIN, env, fakeDb, makeGoogleKeys, makeIdToken } from "./testUtils.js";
+import { CLIENT_ID, ORIGIN, env, sqliteD1, makeGoogleKeys, makeIdToken } from "./testUtils.js";
 
 let keys;
 beforeAll(async () => {
   keys = await makeGoogleKeys();
 });
 
+const userCount = (db) => db.raw.prepare("SELECT COUNT(*) AS n FROM users").get().n;
+
 function setup(extraEnv = {}) {
-  const db = fakeDb();
+  const db = sqliteD1();
   const app = createApp({ googleKeySet: keys.publicKey });
   const call = (path, { method = "GET", headers = {}, body, cookie } = {}) =>
     app.request(
@@ -68,7 +70,7 @@ describe("auth routes", () => {
     const { user } = await res.json();
     expect(user.email).toBe("ada@example.com");
     expect(user.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(ctx.db.users.size).toBe(1);
+    expect(userCount(ctx.db)).toBe(1);
 
     const session = res.headers.getSetCookie().find((c) => c.startsWith("__Host-sr_session="));
     expect(session).toMatch(/HttpOnly/i);
@@ -80,7 +82,7 @@ describe("auth routes", () => {
     const first = (await (await signIn(ctx)).json()).user;
     const second = (await (await signIn(ctx)).json()).user;
     expect(second.id).toBe(first.id);
-    expect(ctx.db.users.size).toBe(1);
+    expect(userCount(ctx.db)).toBe(1);
   });
 
   it("rejects a sign-in with no nonce cookie", async () => {
@@ -109,7 +111,7 @@ describe("auth routes", () => {
   it("/me treats a session for a deleted user as signed out", async () => {
     const ctx = setup();
     const signedIn = await signIn(ctx);
-    ctx.db.users.clear();
+    ctx.db.raw.exec("DELETE FROM users");
     const me = await ctx.call("/api/auth/me", { cookie: cookiesFrom(signedIn) });
     expect(await me.json()).toEqual({ user: null });
   });
