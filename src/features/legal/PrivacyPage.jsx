@@ -1,11 +1,11 @@
 import React from "react";
 import LegalLayout, { Section } from "./LegalLayout.jsx";
 
-// DRAFT: review (ideally with legal advice) before public launch, and update
-// when cloud profile sync (Phase 2) and PDF storage (Phase 3) ship.
+// Keep in sync with what the app stores: update when cloud profile sync
+// (Phase 2) and PDF storage (Phase 3) ship.
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="November 2026 (draft)">
+    <LegalLayout title="Privacy Policy" updated="November 2, 2026">
       <p>
         SightRead is a tool for reading sheet music hands-free. This page
         explains what information it uses and where that information lives.
@@ -52,12 +52,12 @@ export default function PrivacyPage() {
       <Section title="Deleting your data">
         <p>
           You can sign out at any time. Account deletion is coming; until then,
-          contact us at [CONTACT EMAIL] and we will delete your account.
+          contact us at <a href="mailto:patjandra@gmail.com" className="underline hover:text-white">patjandra@gmail.com</a> and we will delete your account.
         </p>
       </Section>
 
       <Section title="Contact">
-        <p>[CONTACT EMAIL]</p>
+        <p><a href="mailto:patjandra@gmail.com" className="underline hover:text-white">patjandra@gmail.com</a></p>
       </Section>
     </LegalLayout>
   );

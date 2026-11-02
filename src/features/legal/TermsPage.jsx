@@ -1,11 +1,10 @@
 import React from "react";
 import LegalLayout, { Section } from "./LegalLayout.jsx";
 
-// DRAFT: review (ideally with legal advice) before public launch, and add
-// upload/content terms when PDF storage (Phase 3) ships.
+// Add upload/content terms when PDF storage (Phase 3) ships.
 export default function TermsPage() {
   return (
-    <LegalLayout title="Terms of Service" updated="November 2026 (draft)">
+    <LegalLayout title="Terms of Service" updated="November 2, 2026">
       <p>
         By using SightRead you agree to these terms. If you do not agree, please
         do not use the service.
@@ -45,7 +44,7 @@ export default function TermsPage() {
       <Section title="Changes and contact">
         <p>
           We may update these terms; continued use means you accept the changes.
-          Questions: [CONTACT EMAIL]
+          Questions: <a href="mailto:patjandra@gmail.com" className="underline hover:text-white">patjandra@gmail.com</a>
         </p>
       </Section>
     </LegalLayout>
