@@ -1,0 +1,33 @@
+name: CI
+
+# Build and test on every push to the main branches and on every PR.
+on:
+  push:
+    branches: [main, vibeWeb, login-page]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Reproducible install from the committed lockfile.
+      - name: Install dependencies
+        run: npm ci
+
+      # Unit tests for the gaze / calibration / scroll logic (Vitest).
+      - name: Run tests
+        run: npm test
+
+      # Ensure the production bundle still compiles.
+      - name: Build
+        run: npm run build
