@@ -37,6 +37,12 @@ export default defineConfig({
       "pdfjs-dist": path.resolve("node_modules/pdfjs-dist"),
     },
   },
+  server: {
+    // In dev the Worker (API) runs separately under `wrangler dev`; Vite serves
+    // the UI and forwards /api to it. changeOrigin stays off so the Host header
+    // keeps matching the browser's Origin, which the CSRF check compares.
+    proxy: { "/api": "http://localhost:8787" },
+  },
   optimizeDeps: {
     exclude: ["@mediapipe/tasks-vision"],
   },

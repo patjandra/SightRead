@@ -2,3 +2,4 @@
 # Generate a secret with: openssl rand -base64 32
 SESSION_SECRET=change-me
 GOOGLE_CLIENT_ID=REPLACE_WITH_DEV_CLIENT_ID
+ALLOWED_ORIGINS=http://localhost:5173

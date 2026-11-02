@@ -7,7 +7,7 @@ beforeAll(async () => {
   keys = await makeGoogleKeys();
 });
 
-function setup() {
+function setup(extraEnv = {}) {
   const db = fakeDb();
   const app = createApp({ googleKeySet: keys.publicKey });
   const call = (path, { method = "GET", headers = {}, body, cookie } = {}) =>
@@ -22,7 +22,7 @@ function setup() {
         },
         body: body ? JSON.stringify(body) : undefined,
       },
-      env(db)
+      { ...env(db), ...extraEnv }
     );
   return { db, call };
 }
@@ -133,6 +133,16 @@ describe("csrf protection", () => {
     const res = await call("/api/auth/logout", { method: "POST", headers: { Origin: "https://evil.example" } });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("csrf_origin");
+  });
+});
+
+describe("ALLOWED_ORIGINS (local dev)", () => {
+  it("accepts a listed origin and still rejects others", async () => {
+    const { call } = setup({ ALLOWED_ORIGINS: "http://localhost:5173" });
+    const ok = await call("/api/auth/logout", { method: "POST", headers: { Origin: "http://localhost:5173" } });
+    expect(ok.status).toBe(204);
+    const bad = await call("/api/auth/logout", { method: "POST", headers: { Origin: "https://evil.example" } });
+    expect(bad.status).toBe(403);
   });
 });
 
