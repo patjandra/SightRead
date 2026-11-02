@@ -15,7 +15,14 @@ const NONCE_TTL_SEC = 5 * 60;
 
 const baseCookie = { prefix: "host", httpOnly: true, secure: true, sameSite: "Lax", path: "/" };
 
-const key = (secret) => new TextEncoder().encode(secret);
+const MIN_SECRET_LENGTH = 32;
+
+const key = (secret) => {
+  if (typeof secret !== "string" || secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`SESSION_SECRET must be set and at least ${MIN_SECRET_LENGTH} characters`);
+  }
+  return new TextEncoder().encode(secret);
+};
 
 export async function signSession(secret, userId, now = Date.now()) {
   const iat = Math.floor(now / 1000);

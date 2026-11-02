@@ -18,6 +18,13 @@ export async function verifyGoogleIdToken(
   idToken,
   { clientId, nonce, keySet = GOOGLE_JWKS }
 ) {
+  // jose skips the `aud` check entirely when `audience` is undefined, which
+  // would accept ID tokens minted for any other Google app. Fail closed.
+  if (!clientId || clientId.startsWith("REPLACE_WITH")) {
+    console.error("[sightread] GOOGLE_CLIENT_ID is not configured");
+    throw new ApiError(500, "misconfigured", "Sign-in is not available.");
+  }
+
   let payload;
   try {
     ({ payload } = await jwtVerify(idToken, keySet, {

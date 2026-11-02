@@ -11,6 +11,12 @@ describe("session tokens", () => {
     expect(await verifySession(SECRET, token)).toEqual({ userId: "user-1", needsRefresh: false });
   });
 
+  it("refuses a missing or short secret", async () => {
+    await expect(signSession(undefined, "user-1")).rejects.toThrow(/SESSION_SECRET/);
+    await expect(signSession("change-me", "user-1")).rejects.toThrow(/SESSION_SECRET/);
+    expect(await verifySession("change-me", "x.y.z")).toBeNull();
+  });
+
   it("rejects a missing, tampered, or wrong-secret token", async () => {
     const token = await signSession(SECRET, "user-1");
     expect(await verifySession(SECRET, undefined)).toBeNull();

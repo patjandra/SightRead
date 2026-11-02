@@ -26,6 +26,15 @@ describe("verifyGoogleIdToken", () => {
     await expect(verify(token)).resolves.toBeTruthy();
   });
 
+  it("fails closed when the client ID is not configured", async () => {
+    const token = await makeIdToken(keys.privateKey, { aud: "someone-else" });
+    for (const clientId of [undefined, "", "REPLACE_WITH_STAGING_CLIENT_ID"]) {
+      await expect(
+        verifyGoogleIdToken(token, { clientId, nonce: "nonce-1", keySet: keys.publicKey })
+      ).rejects.toMatchObject({ status: 500, code: "misconfigured" });
+    }
+  });
+
   it("rejects the wrong audience", async () => {
     const token = await makeIdToken(keys.privateKey, { aud: "someone-else" });
     await expect(verify(token)).rejects.toMatchObject({ code: "invalid_token" });
