@@ -8,6 +8,7 @@ import CalibrationScreen from "./components/CalibrationScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
 import TrackingWarning from "./components/TrackingWarning.jsx";
 import { useOnSignOut } from "../auth/useOnSignOut.js";
+import { useAuth } from "../auth/useAuth.js";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
@@ -39,6 +40,8 @@ export default function ReaderPage() {
   const zoomIn  = () => setZoom((z) => Math.min(ZOOM_MAX, parseFloat((z + ZOOM_STEP).toFixed(2))));
   const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, parseFloat((z - ZOOM_STEP).toFixed(2))));
 
+  const { user, status: authStatus, sessionUnknown, refresh: refreshAuth } = useAuth();
+
   // ── Profiles ───────────────────────────────────────────────────────────────
   const {
     profiles,
@@ -48,7 +51,12 @@ export default function ReaderPage() {
     addProfile,
     updateSelectedProfile,
     removeProfile,
-  } = useLocalProfiles();
+  } = useLocalProfiles({
+    user,
+    authStatus,
+    sessionUnknown,
+    onUnauthorized: refreshAuth,
+  });
 
   // Create a profile with no calibration yet; the user calibrates it separately.
   const handleCreateProfile = useCallback(

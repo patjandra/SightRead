@@ -9,39 +9,47 @@ export const AuthContext = createContext(null);
  *
  *   status: "loading" (checking the session) | "guest" | "signed-in"
  *
- * `requireAuth(action)` is the save gate: signed-in users run `action`
- * immediately; guests get the sign-in prompt, and `action` runs once they have
- * signed in. Dismissing the prompt discards it. `openSignIn()` shows the same
+ * `requireAuth(action)` is the save gate: signed-in users run `action(user)`
+ * immediately; guests get the sign-in prompt, and `action(user)` runs once they
+ * have signed in. The user is passed in because the caller's own copy of auth
+ * state is still the pre-sign-in one when the action fires. Dismissing the prompt discards it. `openSignIn()` shows the same
  * prompt without a pending action.
  */
 export default function AuthProvider({ children }) {
   const [status, setStatus] = useState("loading");
   const [user, setUser] = useState(null);
+  // True when the session check failed (API unreachable), as opposed to the
+  // server confirming there is no session. Callers must not treat this as a
+  // sign-out, e.g. by deleting locally cached account data.
+  const [sessionUnknown, setSessionUnknown] = useState(false);
   // null = closed; "save" = a guest tried to save; "signin" = they chose Sign in.
   const [promptMode, setPromptMode] = useState(null);
   const pendingRef = useRef(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    getMe()
-      .then(({ user }) => {
-        if (cancelled) return;
-        setUser(user);
-        setStatus(user ? "signed-in" : "guest");
-      })
-      .catch(() => {
-        // API unreachable: behave as a guest so the local app still works.
-        if (!cancelled) setStatus("guest");
-      });
-    return () => {
-      cancelled = true;
-    };
+  /** (Re)check the session with the server. */
+  const refresh = useCallback(async () => {
+    try {
+      const { user } = await getMe();
+      setUser(user);
+      setSessionUnknown(false);
+      setStatus(user ? "signed-in" : "guest");
+    } catch {
+      // API unreachable: behave as a guest so the local app still works, but
+      // flag that we don't actually know.
+      setSessionUnknown(true);
+      setStatus((s) => (s === "loading" ? "guest" : s));
+    }
   }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   /** Exchange a Google credential for a session. Throws on failure. */
   const completeSignIn = useCallback(async (credential) => {
     const { user } = await signInWithGoogle(credential);
     setUser(user);
+    setSessionUnknown(false);
     setStatus("signed-in");
 
     const pending = pendingRef.current;
@@ -49,7 +57,7 @@ export default function AuthProvider({ children }) {
     setPromptMode(null);
     if (pending) {
       try {
-        await pending();
+        await pending(user);
       } catch (err) {
         console.error("[SightRead] Action after sign-in failed:", err);
       }
@@ -67,7 +75,7 @@ export default function AuthProvider({ children }) {
 
   const requireAuth = useCallback(
     (action) => {
-      if (user) return action();
+      if (user) return action(user);
       pendingRef.current = action;
       setPromptMode("save");
     },
@@ -86,7 +94,16 @@ export default function AuthProvider({ children }) {
     setPromptMode(null);
   }, []);
 
-  const value = { status, user, completeSignIn, signOut, requireAuth, openSignIn };
+  const value = {
+    status,
+    user,
+    sessionUnknown,
+    refresh,
+    completeSignIn,
+    signOut,
+    requireAuth,
+    openSignIn,
+  };
 
   return (
     <AuthContext.Provider value={value}>

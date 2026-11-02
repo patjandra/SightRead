@@ -57,10 +57,43 @@ describe("AuthProvider / requireAuth", () => {
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("guest"));
   });
 
-  it("falls back to guest if the API is unreachable", async () => {
+  it("falls back to guest, flagged as unknown, if the API is unreachable", async () => {
     client.getMe.mockRejectedValue(new Error("offline"));
-    renderApp(vi.fn());
+    let seen;
+    function Probe() {
+      seen = useAuth();
+      return null;
+    }
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Harness action={vi.fn()} />
+          <Probe />
+        </AuthProvider>
+      </MemoryRouter>
+    );
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("guest"));
+    expect(seen.sessionUnknown).toBe(true);
+  });
+
+  it("refresh() re-checks the session and clears the unknown flag", async () => {
+    client.getMe.mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ user: USER });
+    let seen;
+    function Probe() {
+      seen = useAuth();
+      return null;
+    }
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Probe />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(seen.sessionUnknown).toBe(true));
+    await seen.refresh();
+    await waitFor(() => expect(seen.status).toBe("signed-in"));
+    expect(seen.sessionUnknown).toBe(false);
   });
 
   it("runs the action immediately when signed in", async () => {
@@ -71,6 +104,7 @@ describe("AuthProvider / requireAuth", () => {
 
     fireEvent.click(screen.getByText("save"));
     expect(action).toHaveBeenCalledTimes(1);
+    expect(action).toHaveBeenCalledWith(USER);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -87,6 +121,7 @@ describe("AuthProvider / requireAuth", () => {
 
     fireEvent.click(screen.getByText("google"));
     await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    expect(action).toHaveBeenCalledWith(USER); // gets the freshly signed-in user
     expect(client.signInWithGoogle).toHaveBeenCalledWith("fake-credential");
     expect(screen.getByTestId("user")).toHaveTextContent("ada@example.com");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
