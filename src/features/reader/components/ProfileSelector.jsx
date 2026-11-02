@@ -9,13 +9,78 @@ import React, { useState, useRef, useEffect } from "react";
  *   onSelect    - (id) => void
  *   onDelete    - (id) => void
  *   onCreate    - (name) => void  — called only after uniqueness check passes
+ *   syncStatus  - "idle" | "syncing" | "error" (account sync, if signed in)
+ *   onSaveToAccount - (id) => void  — guest-local profile's "save to account"
+ *   onRetrySync - () => void
  */
+
+// Small cloud icons for a profile's sync state. All share one frame so the row
+// doesn't shift as a profile moves between states.
+function CloudIcon({ children }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    >
+      <path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.78A6 6 0 1 0 6 18.5" />
+      {children}
+    </svg>
+  );
+}
+
+function SyncControl({ profile, selected, syncStatus, onSaveToAccount, onRetrySync }) {
+  const idle = selected ? "text-indigo-200 hover:text-white" : "text-slate-500 hover:text-slate-200";
+  const stop = (fn) => (e) => {
+    e.stopPropagation();
+    fn();
+  };
+
+  if (profile.syncState === "synced") {
+    return (
+      <span className="text-emerald-400 flex-shrink-0" title="Saved to your account">
+        <CloudIcon><path d="m9 15 2 2 4-4" /></CloudIcon>
+      </span>
+    );
+  }
+
+  if (profile.syncState === "pending") {
+    return syncStatus === "error" ? (
+      <button
+        className="text-amber-400 hover:text-amber-300 flex-shrink-0"
+        onClick={stop(onRetrySync)}
+        title="Not synced yet. Click to retry."
+        aria-label="Not synced yet. Retry."
+      >
+        <CloudIcon><path d="M12 12v3" /><path d="M12 18h.01" /></CloudIcon>
+      </button>
+    ) : (
+      <span className={`flex-shrink-0 animate-pulse ${selected ? "text-indigo-200" : "text-slate-400"}`} title="Syncing…">
+        <CloudIcon><path d="M12 12v4" /></CloudIcon>
+      </span>
+    );
+  }
+
+  // "local": only on this device. Saving needs an account.
+  return (
+    <button
+      className={`flex-shrink-0 ${idle}`}
+      onClick={stop(() => onSaveToAccount?.(profile.id))}
+      title="Save to account"
+      aria-label={`Save ${profile.name} to account`}
+    >
+      <CloudIcon><path d="M12 16v-5" /><path d="m9.5 13 2.5-2.5 2.5 2.5" /></CloudIcon>
+    </button>
+  );
+}
 export default function ProfileSelector({
   profiles,
   selectedId,
   onSelect,
   onDelete,
   onCreate,
+  syncStatus = "idle",
+  onSaveToAccount,
+  onRetrySync,
 }) {
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -133,6 +198,13 @@ export default function ProfileSelector({
                     title={p.points ? "Calibrated" : "Not calibrated"}
                   />
                   <span className="flex-1 truncate">{p.name}</span>
+                  <SyncControl
+                    profile={p}
+                    selected={p.id === selectedId}
+                    syncStatus={syncStatus}
+                    onSaveToAccount={onSaveToAccount}
+                    onRetrySync={onRetrySync}
+                  />
                   <button
                     className={`text-xs flex-shrink-0 px-1 rounded ${
                       confirmDelete === p.id
@@ -143,7 +215,11 @@ export default function ProfileSelector({
                     }`}
                     onClick={(e) => handleDeleteClick(p.id, e)}
                     title={
-                      confirmDelete === p.id ? "Click again to confirm delete" : "Delete profile"
+                      confirmDelete === p.id
+                        ? "Click again to confirm delete"
+                        : p.ownerId
+                        ? "Delete profile (also removes it from your account)"
+                        : "Delete profile"
                     }
                   >
                     {confirmDelete === p.id ? "sure?" : "✕"}

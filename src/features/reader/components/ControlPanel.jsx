@@ -64,6 +64,9 @@ export default function ControlPanel({
   onSelectProfile,
   onDeleteProfile,
   onCreateProfile,
+  syncStatus,
+  onSaveProfileToAccount,
+  onRetrySync,
   // Calibration
   onStartCalibration,
   isCalibrating,
@@ -216,6 +219,9 @@ export default function ControlPanel({
           onSelect={onSelectProfile}
           onDelete={onDeleteProfile}
           onCreate={onCreateProfile}
+          syncStatus={syncStatus}
+          onSaveToAccount={onSaveProfileToAccount}
+          onRetrySync={onRetrySync}
         />
         {selectedProfile && isCalibrationStale(selectedProfile) && (
           <p className="text-xs text-amber-400">

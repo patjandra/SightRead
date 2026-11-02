@@ -7,6 +7,7 @@ import PDFViewer from "./components/PDFViewer.jsx";
 import CalibrationScreen from "./components/CalibrationScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
 import TrackingWarning from "./components/TrackingWarning.jsx";
+import UploadLocalProfilesDialog from "./components/UploadLocalProfilesDialog.jsx";
 import { useOnSignOut } from "../auth/useOnSignOut.js";
 import { useAuth } from "../auth/useAuth.js";
 
@@ -40,7 +41,13 @@ export default function ReaderPage() {
   const zoomIn  = () => setZoom((z) => Math.min(ZOOM_MAX, parseFloat((z + ZOOM_STEP).toFixed(2))));
   const zoomOut = () => setZoom((z) => Math.max(ZOOM_MIN, parseFloat((z - ZOOM_STEP).toFixed(2))));
 
-  const { user, status: authStatus, sessionUnknown, refresh: refreshAuth } = useAuth();
+  const {
+    user,
+    status: authStatus,
+    sessionUnknown,
+    refresh: refreshAuth,
+    requireAuth,
+  } = useAuth();
 
   // ── Profiles ───────────────────────────────────────────────────────────────
   const {
@@ -51,12 +58,25 @@ export default function ReaderPage() {
     addProfile,
     updateSelectedProfile,
     removeProfile,
+    syncStatus,
+    saveToAccount,
+    uploadOffer,
+    confirmUploadOffer,
+    dismissUploadOffer,
+    retrySync,
   } = useLocalProfiles({
     user,
     authStatus,
     sessionUnknown,
     onUnauthorized: refreshAuth,
   });
+
+  // The save gate: guests are asked to sign in first, then the profile uploads
+  // (with the freshly signed-in user, since our own auth state is one step behind).
+  const handleSaveProfileToAccount = useCallback(
+    (id) => requireAuth((accountUser) => saveToAccount(id, accountUser)),
+    [requireAuth, saveToAccount]
+  );
 
   // Create a profile with no calibration yet; the user calibrates it separately.
   const handleCreateProfile = useCallback(
@@ -212,6 +232,14 @@ export default function ReaderPage() {
 
       <TrackingWarning show={showWarning} message={warningMessage} />
 
+      {uploadOffer && user && (
+        <UploadLocalProfilesDialog
+          profiles={uploadOffer}
+          onConfirm={(ids) => confirmUploadOffer(ids, user)}
+          onSkip={dismissUploadOffer}
+        />
+      )}
+
       {isCalibrating && (
         <CalibrationScreen
           gazeData={gazeData}
@@ -232,6 +260,9 @@ export default function ReaderPage() {
           onSelectProfile={selectProfile}
           onDeleteProfile={removeProfile}
           onCreateProfile={handleCreateProfile}
+          syncStatus={syncStatus}
+          onSaveProfileToAccount={handleSaveProfileToAccount}
+          onRetrySync={retrySync}
           onStartCalibration={handleStartCalibration}
           isCalibrating={isCalibrating}
           isTracking={isTracking}
