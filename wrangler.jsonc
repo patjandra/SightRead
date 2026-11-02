@@ -1,0 +1,49 @@
+{
+  // Top level = local development (`wrangler dev`). Staging and production are
+  // separate Workers with their own D1 databases; bindings and vars are not
+  // inherited by `env` blocks, so each environment repeats them.
+  "name": "sightread",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+
+  // Static app. Only /api/* runs the Worker first; every other path is served
+  // from dist/ with SPA fallback so client-side routes (/signin, ...) work.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "sightread-local", "database_id": "local", "migrations_dir": "migrations" }
+  ],
+  // Public value. Replace with your Google OAuth web client ID (also in .dev.vars for local dev).
+  "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_DEV_CLIENT_ID" },
+
+  "env": {
+    "staging": {
+      "name": "sightread-staging",
+      "assets": {
+        "directory": "./dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "sightread-staging", "database_id": "REPLACE_WITH_STAGING_DB_ID", "migrations_dir": "migrations" }
+      ],
+      "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_STAGING_CLIENT_ID" }
+    },
+    "production": {
+      "name": "sightread-production",
+      "assets": {
+        "directory": "./dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "sightread-production", "database_id": "REPLACE_WITH_PRODUCTION_DB_ID", "migrations_dir": "migrations" }
+      ],
+      "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_PRODUCTION_CLIENT_ID" }
+    }
+  }
+}
