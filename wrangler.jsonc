@@ -18,7 +18,7 @@
     { "binding": "DB", "database_name": "sightread-local", "database_id": "local", "migrations_dir": "migrations" }
   ],
   // Public value. Replace with your Google OAuth web client ID (also in .dev.vars for local dev).
-  "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_DEV_CLIENT_ID" },
+  "vars": { "GOOGLE_CLIENT_ID": "649384260817-bb1kj82kblqg9ldrd8njk1klli2c7j1t.apps.googleusercontent.com" },
 
   "env": {
     "staging": {
