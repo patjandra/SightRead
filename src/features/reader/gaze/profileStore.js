@@ -17,7 +17,7 @@
  * React state from them on mount and writes through on every mutation.
  */
 
-import { CALIBRATION_VERSION } from "../config.js";
+import { CALIBRATION_VERSION } from "../../../config.js";
 
 const DB_NAME = "sightread";
 const DB_VERSION = 1;

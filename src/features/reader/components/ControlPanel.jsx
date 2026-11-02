@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import ProfileSelector from "./ProfileSelector.jsx";
 import FacePreview from "./FacePreview.jsx";
-import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../config.js";
+import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
 import {
   isProfileCalibrated,
   isCalibrationStale,

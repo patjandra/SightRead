@@ -16,7 +16,7 @@
  *   at 20 or 60 FPS.
  */
 
-import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../config.js";
+import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
 
 const MAX_SPEED_PX_PER_SEC = 200;
 const DWELL_MS = 250;

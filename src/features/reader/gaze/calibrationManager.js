@@ -1,4 +1,4 @@
-import { CALIBRATION_VERSION } from "../config.js";
+import { CALIBRATION_VERSION } from "../../../config.js";
 
 // Profile persistence (create/update/delete, storage) lives in profileStore.js.
 // This module holds only the pure, storage-free calibration logic: deciding
