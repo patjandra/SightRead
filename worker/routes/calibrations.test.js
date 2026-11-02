@@ -147,6 +147,15 @@ describe("deletes", () => {
     expect(p.updatedAt).toBe(p.deletedAt);
   });
 
+  it("scrubs the name and calibration values from the tombstone", async () => {
+    await put(alice, ID_1, profileBody({ name: "Private name" }));
+    await call(alice, `/${ID_1}`, { method: "DELETE" });
+    const [p] = await list(alice);
+    expect(p).toMatchObject({ name: "", points: null, deletedAt: expect.any(String) });
+    const row = db.raw.prepare("SELECT * FROM calibration_profiles WHERE id = ?").get(ID_1);
+    expect(JSON.stringify(row)).not.toContain("Private name");
+  });
+
   it("is idempotent", async () => {
     await put(alice, ID_1, profileBody());
     await call(alice, `/${ID_1}`, { method: "DELETE" });
@@ -164,7 +173,7 @@ describe("deletes", () => {
     const newer = new Date(Date.now() + 60_000).toISOString();
     const res = await put(alice, ID_1, profileBody({ name: "Zombie", updatedAt: newer }));
     expect((await res.json()).profile.deletedAt).toBeTruthy();
-    expect((await list(alice))[0].name).toBe("Desk");
+    expect((await list(alice))[0]).toMatchObject({ name: "", points: null });
   });
 
   it("does not count deleted profiles toward the cap", async () => {

@@ -1,8 +1,8 @@
 import React from "react";
 import LegalLayout, { Section } from "./LegalLayout.jsx";
 
-// Keep in sync with what the app stores: update when cloud profile sync
-// (Phase 2) and PDF storage (Phase 3) ship.
+// Keep in sync with what the app stores: update when cloud PDF storage
+// (Phase 3) and account deletion ship.
 export default function PrivacyPage() {
   return (
     <LegalLayout title="Privacy Policy" updated="November 2, 2026">
@@ -19,11 +19,30 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="Your sheet music and calibration">
+      <Section title="Your sheet music">
         <p>
-          PDFs you open are read by your browser and are not uploaded. Your
-          calibration profiles are stored in your browser on your device.
-          Clearing your browser data removes them.
+          PDFs you open are read by your browser and are not uploaded or stored
+          by us.
+        </p>
+      </Section>
+
+      <Section title="Your calibration profiles">
+        <p>
+          A calibration profile is a name you choose plus three numbers that
+          describe where your gaze lands on the screen. By default, profiles
+          are stored only in your browser on your device, and clearing your
+          browser data removes them.
+        </p>
+        <p>
+          If you are signed in and save a profile to your account, we store its
+          name, those three numbers, and when it was created and last changed,
+          so it is available on your other devices. We never store camera
+          images.
+        </p>
+        <p>
+          Signing out removes your account's profiles from that browser; they
+          remain in your account for your next sign-in. Profiles you created
+          without saving them to your account stay on the device.
         </p>
       </Section>
 
@@ -51,7 +70,14 @@ export default function PrivacyPage() {
 
       <Section title="Deleting your data">
         <p>
-          You can sign out at any time. Account deletion is coming; until then,
+          You can delete any saved profile at any time. This removes its name
+          and calibration values from your account and, the next time they
+          sync, from your other devices. We keep only a blank marker with a
+          timestamp so those devices know to remove it.
+        </p>
+        <p>
+          You can sign out at any time. To delete your whole account, until a
+          delete button is available,
           contact us at <a href="mailto:patjandra@gmail.com" className="underline hover:text-white">patjandra@gmail.com</a> and we will delete your account.
         </p>
       </Section>

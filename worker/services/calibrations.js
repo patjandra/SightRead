@@ -163,7 +163,11 @@ export async function deleteProfile(db, userId, id, now = new Date()) {
   const stamp = now.toISOString();
   await db
     .prepare(
-      `UPDATE calibration_profiles SET deleted_at = ?, updated_at = ?
+      // Scrub the content: a tombstone only needs to exist so other devices
+      // learn of the delete, so it keeps no name or calibration values.
+      `UPDATE calibration_profiles
+          SET deleted_at = ?, updated_at = ?, name = '',
+              point_top = NULL, point_center = NULL, point_bottom = NULL
         WHERE user_id = ? AND id = ? AND deleted_at IS NULL`
     )
     .bind(stamp, stamp, userId, id)
