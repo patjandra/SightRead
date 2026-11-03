@@ -55,4 +55,32 @@ describe("PdfLibrarySection", () => {
     expect(screen.queryByText("Save to account")).not.toBeInTheDocument();
     expect(screen.getByText("Not enough storage left in your account.")).toBeInTheDocument();
   });
+
+  describe("with many PDFs", () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ id: `id${i}`, name: `Piece ${i}.pdf`, size: 1024 }));
+    const manyProps = { ...base, pdfs: many };
+
+    it("has no search box and no scroll cap for a short list", () => {
+      render(<PdfLibrarySection {...base} />);
+      expect(screen.queryByLabelText("Search your PDFs")).not.toBeInTheDocument();
+      expect(screen.getByRole("list")).not.toHaveClass("overflow-y-auto");
+    });
+
+    it("scrolls inside a fixed height and offers search", () => {
+      render(<PdfLibrarySection {...manyProps} />);
+      expect(screen.getByRole("list")).toHaveClass("overflow-y-auto");
+      expect(screen.getByLabelText("Search your PDFs")).toBeInTheDocument();
+    });
+
+    it("filters by name, ignoring case, and says when nothing matches", () => {
+      render(<PdfLibrarySection {...manyProps} />);
+      const box = screen.getByLabelText("Search your PDFs");
+      fireEvent.change(box, { target: { value: "  PIECE 3 " } });
+      expect(screen.getAllByRole("listitem")).toHaveLength(1);
+      expect(screen.getByText("Piece 3.pdf")).toBeInTheDocument();
+      fireEvent.change(box, { target: { value: "zzz" } });
+      expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+      expect(screen.getByText('No PDFs match "zzz".')).toBeInTheDocument();
+    });
+  });
 });

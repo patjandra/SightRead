@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 
 const MB = 1024 * 1024;
+// Past this many PDFs the list scrolls inside a fixed height and gains a search box.
+const SCROLL_AFTER = 5;
+
 const formatSize = (bytes) =>
   bytes >= MB ? `${(bytes / MB).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
@@ -21,6 +24,11 @@ export default function PdfLibrarySection({
   onDelete,
   activeId,
 }) {
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const visible = needle ? pdfs.filter((p) => p.name.toLowerCase().includes(needle)) : pdfs;
+  const many = pdfs.length > SCROLL_AFTER;
+
   return (
     <section className="space-y-1.5">
       {canSave && (
@@ -42,8 +50,22 @@ export default function PdfLibrarySection({
           {pdfs.length === 0 ? (
             <p className="text-xs text-slate-500">No saved PDFs yet.</p>
           ) : (
-            <ul className="space-y-1">
-              {pdfs.map((pdf) => (
+            <>
+              {many && (
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search your PDFs"
+                  aria-label="Search your PDFs"
+                  className="w-full rounded-md bg-slate-900/60 border border-slate-600 px-2 py-1 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+              )}
+              {visible.length === 0 && (
+                <p className="text-xs text-slate-500">No PDFs match "{query.trim()}".</p>
+              )}
+            <ul className={`space-y-1 ${many ? "max-h-56 overflow-y-auto pr-1 sr-scroll" : ""}`}>
+              {visible.map((pdf) => (
                 <li
                   key={pdf.id}
                   className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
@@ -69,6 +91,7 @@ export default function PdfLibrarySection({
                 </li>
               ))}
             </ul>
+            </>
           )}
           {limitBytes > 0 && (
             <div>
