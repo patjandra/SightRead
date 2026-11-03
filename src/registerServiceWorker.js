@@ -15,7 +15,13 @@ export function registerServiceWorker() {
         .filter((u) => new URL(u).origin === location.origin);
       // The PDF renderer's worker only loads once a PDF is shown; fetch it now.
       const pdfWorker = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).href;
-      worker?.postMessage({ type: "precache", urls: [...urls, pdfWorker] });
+      // The face model and the matching WASM are only requested when tracking starts.
+      const tracking = [
+        "/mediapipe-models/face_landmarker.task",
+        "/mediapipe-wasm/vision_wasm_internal.js",
+        "/mediapipe-wasm/vision_wasm_internal.wasm",
+      ].map((p) => new URL(p, location.origin).href);
+      worker?.postMessage({ type: "precache", urls: [...urls, pdfWorker, ...tracking] });
     } catch (err) {
       console.error("[SightRead] Offline mode unavailable:", err);
     }

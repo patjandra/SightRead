@@ -39,6 +39,7 @@ describe("service worker routing", () => {
   it("caches the app's static files", () => {
     expect(route("/assets/index-abc123.js")).toBe("cache-first");
     expect(route("/mediapipe-wasm/vision_wasm_internal.wasm")).toBe("cache-first");
+    expect(route("/mediapipe-models/face_landmarker.task")).toBe("cache-first");
     expect(route("/favicon-32.png")).toBe("cache-first");
   });
 

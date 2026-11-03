@@ -54,8 +54,9 @@ export function useGazeTracking() {
         // browsers/GPUs and offers no meaningful speed benefit for a single face.
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+            // Served from our own origin (public/mediapipe-models) so tracking
+            // works offline and makes no request to a third party.
+            modelAssetPath: "/mediapipe-models/face_landmarker.task",
             delegate: "CPU",
           },
           runningMode: "VIDEO",

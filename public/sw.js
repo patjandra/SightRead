@@ -7,7 +7,7 @@
 //
 // Bump CACHE when the un-hashed files (mediapipe-wasm/, icons) change; old
 // caches are deleted on activate.
-const CACHE = "sightread-shell-v1";
+const CACHE = "sightread-shell-v2";
 const SHELL = "/index.html";
 const NAV_TIMEOUT_MS = 5000;
 
@@ -18,7 +18,11 @@ function strategyFor(url, method, mode, origin) {
   if (u.origin !== origin) return null;
   if (u.pathname.startsWith("/api/")) return null;
   if (mode === "navigate") return "navigation";
-  if (u.pathname.startsWith("/assets/") || u.pathname.startsWith("/mediapipe-wasm/")) {
+  if (
+    u.pathname.startsWith("/assets/") ||
+    u.pathname.startsWith("/mediapipe-wasm/") ||
+    u.pathname.startsWith("/mediapipe-models/")
+  ) {
     return "cache-first";
   }
   if (/^\/(favicon-\d+|apple-touch-icon|sight-read-logo)\.png$/.test(u.pathname)) return "cache-first";

@@ -47,6 +47,6 @@ export default defineConfig({
     exclude: ["@mediapipe/tasks-vision"],
   },
   // No COEP/COOP headers — they would block cross-origin CDN fetches
-  // (e.g. the face_landmarker.task model from googleapis) without reciprocal
-  // Cross-Origin-Resource-Policy headers on the CDN side.
+  // (e.g. fonts or scripts) without reciprocal Cross-Origin-Resource-Policy
+  // headers on the CDN side. The face model is served locally for that reason.
 });
