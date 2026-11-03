@@ -25,6 +25,8 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
   const [pdfs, setPdfs] = useState([]);
   const [usage, setUsage] = useState({ usedBytes: 0, limitBytes: 0 });
   const [error, setError] = useState(null);
+  // A non-error heads-up, e.g. the file was already in the library.
+  const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
   // Cached files for the account whose library is showing: id -> summary.
   const [cached, setCached] = useState(new Map());
@@ -174,9 +176,17 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
   const save = useCallback(
     async (file, accountUser = null) => {
       setError(null);
+      setNotice(null);
       setBusy(true);
       try {
-        const pdf = await api.uploadPdf(crypto.randomUUID(), file);
+        // Already have this exact file? Skip the upload. (The server checks too,
+        // so a stale list or another device can't create a second copy.)
+        const sha256 = await api.fileSha256(file).catch(() => null);
+        const known = sha256 && pdfs.find((p) => p.sha256 === sha256);
+        const { pdf, duplicate } = known
+          ? { pdf: known, duplicate: true }
+          : await api.uploadPdf(crypto.randomUUID(), file);
+        if (duplicate) setNotice(`Already in your library as "${pdf.name}".`);
         // The file is already in hand, so keep a copy for offline use right away.
         // `accountUser` is passed when saving as the continuation of sign-in, when
         // this hook's own user is still the pre-sign-in one.
@@ -193,7 +203,7 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
         setBusy(false);
       }
     },
-    [reload, fail, cacheUserId, refreshCached]
+    [reload, fail, cacheUserId, refreshCached, pdfs]
   );
 
   /**
@@ -259,6 +269,7 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
     offlineCount: cached.size,
     offlineBytes,
     error,
+    notice,
     busy,
     save,
     open,

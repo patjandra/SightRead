@@ -110,4 +110,12 @@ describe("PdfLibrarySection", () => {
     render(<PdfLibrarySection {...base} signedIn={false} showList canSave={false} />);
     expect(screen.getByText("Etude.pdf")).toBeInTheDocument();
   });
+
+  it("shows a notice, but not alongside an error", () => {
+    const { rerender } = render(<PdfLibrarySection {...base} notice='Already in your library as "Etude.pdf".' />);
+    expect(screen.getByText('Already in your library as "Etude.pdf".')).toBeInTheDocument();
+    rerender(<PdfLibrarySection {...base} notice="Heads up" error="Broke" />);
+    expect(screen.queryByText("Heads up")).not.toBeInTheDocument();
+    expect(screen.getByText("Broke")).toBeInTheDocument();
+  });
 });

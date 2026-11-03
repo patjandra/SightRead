@@ -42,7 +42,17 @@ export async function checkPdfFile(file) {
   }
 }
 
-/** Upload under a client-chosen UUID (idempotent). @returns {Promise<object>} the stored record */
+/** Hex SHA-256 of a file, matching the fingerprint the server stores. */
+export async function fileSha256(file) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Upload under a client-chosen UUID (idempotent). `duplicate` is true when the
+ * account already held a file with the same contents; `pdf` is then that one.
+ * @returns {Promise<{ pdf: object, duplicate: boolean }>}
+ */
 export async function uploadPdf(id, file) {
   await checkPdfFile(file);
   const res = await request(`/${id}`, {
@@ -50,7 +60,8 @@ export async function uploadPdf(id, file) {
     body: file,
     headers: { "X-Filename": encodeURIComponent(file.name) },
   });
-  return (await res.json()).pdf;
+  const { pdf, duplicate } = await res.json();
+  return { pdf, duplicate: !!duplicate };
 }
 
 /** @returns {Promise<Blob>} */

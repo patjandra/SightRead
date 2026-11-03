@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MAX_PDF_BYTES, PdfApiError, checkPdfFile, deletePdf, downloadPdf, listPdfs, uploadPdf } from "./pdfApi.js";
+import { MAX_PDF_BYTES, PdfApiError, checkPdfFile, deletePdf, downloadPdf, fileSha256, listPdfs, uploadPdf } from "./pdfApi.js";
 
 const pdfFile = (name = "Etude.pdf") => new File(["%PDF-1.7 body"], name, { type: "application/pdf" });
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status });
@@ -27,12 +27,27 @@ describe("checkPdfFile", () => {
   });
 });
 
+describe("fileSha256", () => {
+  it("matches the known SHA-256 of the contents", async () => {
+    // sha256("abc")
+    expect(await fileSha256(new File(["abc"], "x.pdf"))).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+  });
+});
+
 describe("uploadPdf", () => {
+  it("reports when the server found a duplicate", async () => {
+    fetchMock.mockResolvedValue(json({ pdf: { id: "old" }, duplicate: true }));
+    expect(await uploadPdf("id-2", pdfFile())).toEqual({ pdf: { id: "old" }, duplicate: true });
+  });
+
   it("PUTs the raw file with the CSRF header and an encoded file name", async () => {
-    fetchMock.mockResolvedValue(json({ pdf: { id: "a", name: "Étude #1.pdf" } }));
+    fetchMock.mockResolvedValue(json({ pdf: { id: "a", name: "Étude #1.pdf" }, duplicate: false }));
     const file = pdfFile("Étude #1.pdf");
-    const pdf = await uploadPdf("id-1", file);
+    const { pdf, duplicate } = await uploadPdf("id-1", file);
     expect(pdf.id).toBe("a");
+    expect(duplicate).toBe(false);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/pdfs/id-1");
     expect(init.method).toBe("PUT");

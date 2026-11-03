@@ -7,7 +7,7 @@ export const MAX_PDFS_PER_USER = 100;
 const MAX_NAME_LENGTH = 200;
 const MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d]; // "%PDF-"
 
-const COLUMNS = "id, name, size, created_at AS createdAt";
+const COLUMNS = "id, name, size, sha256, created_at AS createdAt";
 
 /** Trim, drop control characters, and bound the length of a client-supplied filename. */
 export function cleanName(raw) {
@@ -79,20 +79,40 @@ export async function usage(db, userId) {
   return { usedBytes: row.used, count: row.count };
 }
 
+/** Hex SHA-256 of the file's bytes. Always computed here; clients are not trusted for it. */
+export async function sha256Hex(bytes) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const byHash = (db, userId, sha256) =>
+  db
+    .prepare(`SELECT ${COLUMNS} FROM pdfs WHERE user_id = ? AND sha256 = ?`)
+    .bind(userId, sha256)
+    .first();
+
 /**
- * Store a PDF. Idempotent on (user, id): re-sending an id returns the stored
- * record without writing again. R2 is written first; if the row insert fails
- * the object is removed so nothing is orphaned.
+ * Store a PDF. Resolves to `{ pdf, duplicate }`.
+ *
+ * Idempotent on (user, id): re-sending an id returns the stored record without
+ * writing again. If this account already holds a file with the same contents
+ * (under any id or name) that record is returned with `duplicate: true` and
+ * nothing is stored, so it costs no quota. R2 is written first; if the row
+ * insert fails the object is removed so nothing is orphaned.
  */
 export async function savePdf(env, userId, id, name, bytes) {
   const existing = await env.DB.prepare(`SELECT ${COLUMNS} FROM pdfs WHERE user_id = ? AND id = ?`)
     .bind(userId, id)
     .first();
-  if (existing) return existing;
+  if (existing) return { pdf: existing, duplicate: false };
 
   if (!hasPdfMagic(bytes)) {
     throw new ApiError(415, "not_a_pdf", "That file is not a PDF.");
   }
+  const sha256 = await sha256Hex(bytes);
+  const same = await byHash(env.DB, userId, sha256);
+  if (same) return { pdf: same, duplicate: true };
+
   const { usedBytes, count } = await usage(env.DB, userId);
   if (count >= MAX_PDFS_PER_USER) {
     throw new ApiError(409, "pdf_limit", `You can keep at most ${MAX_PDFS_PER_USER} PDFs.`);
@@ -104,15 +124,19 @@ export async function savePdf(env, userId, id, name, bytes) {
   const key = `${userId}/${crypto.randomUUID()}`;
   await env.PDFS.put(key, bytes, { httpMetadata: { contentType: "application/pdf" } });
   try {
-    return await env.DB.prepare(
-      `INSERT INTO pdfs (user_id, id, name, size, r2_key, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+    const pdf = await env.DB.prepare(
+      `INSERT INTO pdfs (user_id, id, name, size, r2_key, sha256, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        RETURNING ${COLUMNS}`
     )
-      .bind(userId, id, name, bytes.byteLength, key, new Date().toISOString())
+      .bind(userId, id, name, bytes.byteLength, key, sha256, new Date().toISOString())
       .first();
+    return { pdf, duplicate: false };
   } catch (err) {
     await env.PDFS.delete(key).catch(() => {});
+    // Two saves of the same file at once: the unique index let one win.
+    const winner = await byHash(env.DB, userId, sha256).catch(() => null);
+    if (winner) return { pdf: winner, duplicate: true };
     throw err;
   }
 }

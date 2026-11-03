@@ -40,8 +40,8 @@ pdfs.put("/:id", async (c) => {
   const id = pdfId(c);
   const name = cleanName(c.req.header("X-Filename"));
   const bytes = await readCapped(c.req.raw, MAX_PDF_BYTES);
-  const pdf = await savePdf(c.env, c.get("userId"), id, name, bytes);
-  return c.json({ pdf });
+  const { pdf, duplicate } = await savePdf(c.env, c.get("userId"), id, name, bytes);
+  return c.json({ pdf, duplicate });
 });
 
 pdfs.get("/:id/file", async (c) => {

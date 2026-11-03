@@ -5,6 +5,7 @@ import { renderHook, waitFor, act, cleanup } from "@testing-library/react";
 vi.mock("./pdfApi.js", () => ({
   listPdfs: vi.fn(),
   uploadPdf: vi.fn(),
+  fileSha256: vi.fn(),
   downloadPdf: vi.fn(),
   deletePdf: vi.fn(),
 }));
@@ -29,6 +30,7 @@ const LIST = { pdfs: [{ id: "a", name: "A.pdf", size: 10 }], usedBytes: 10, limi
 
 beforeEach(() => {
   vi.resetAllMocks();
+  api.fileSha256.mockResolvedValue("hash-of-new-file");
   cache.listCached.mockResolvedValue([]);
   cache.getCached.mockResolvedValue(null);
   cache.putCached.mockResolvedValue(true);
@@ -62,7 +64,7 @@ describe("usePdfLibrary", () => {
 
   it("save uploads under a fresh id and refreshes the list", async () => {
     api.listPdfs.mockResolvedValue({ pdfs: [], usedBytes: 0, limitBytes: 100 });
-    api.uploadPdf.mockResolvedValue({ id: "new" });
+    api.uploadPdf.mockResolvedValue({ pdf: { id: "new" }, duplicate: false });
     const { result } = renderHook(() => usePdfLibrary({ user: USER }));
     await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(1));
 
@@ -181,7 +183,7 @@ describe("usePdfLibrary", () => {
 
     it("keeps a copy of a file as soon as it is saved, no second click needed", async () => {
       api.listPdfs.mockResolvedValue({ pdfs: [], usedBytes: 0, limitBytes: 100 });
-      api.uploadPdf.mockResolvedValue({ id: "new", name: "A.pdf", size: 5 });
+      api.uploadPdf.mockResolvedValue({ pdf: { id: "new", name: "A.pdf", size: 5 }, duplicate: false });
       const { result } = renderHook(() => usePdfLibrary({ user: USER }));
       await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(1));
       const file = new File(["%PDF-"], "A.pdf");
@@ -193,7 +195,7 @@ describe("usePdfLibrary", () => {
     });
 
     it("caches under the user passed in when saving right after sign-in", async () => {
-      api.uploadPdf.mockResolvedValue({ id: "new", name: "A.pdf", size: 5 });
+      api.uploadPdf.mockResolvedValue({ pdf: { id: "new", name: "A.pdf", size: 5 }, duplicate: false });
       api.listPdfs.mockResolvedValue(LIST);
       const { result } = renderHook(() => usePdfLibrary({ user: null, authStatus: "guest" }));
       const file = new File(["%PDF-"], "A.pdf");
@@ -205,7 +207,7 @@ describe("usePdfLibrary", () => {
 
     it("a failed copy never fails the save", async () => {
       api.listPdfs.mockResolvedValue(LIST);
-      api.uploadPdf.mockResolvedValue({ id: "new", name: "A.pdf", size: 5 });
+      api.uploadPdf.mockResolvedValue({ pdf: { id: "new", name: "A.pdf", size: 5 }, duplicate: false });
       cache.putCached.mockRejectedValue(new Error("quota"));
       vi.spyOn(console, "error").mockImplementation(() => {});
       const { result } = renderHook(() => usePdfLibrary({ user: USER }));
@@ -320,6 +322,66 @@ describe("usePdfLibrary", () => {
       });
       expect(cache.clearCache).toHaveBeenCalled();
       expect(result.current.offlineCount).toBe(0);
+    });
+  });
+
+  describe("duplicate files", () => {
+    const EXISTING = { id: "a", name: "A.pdf", size: 10, sha256: "hash-of-a" };
+    const withExisting = { pdfs: [EXISTING], usedBytes: 10, limitBytes: 100 };
+
+    it("skips the upload when the library already holds the same contents", async () => {
+      api.listPdfs.mockResolvedValue(withExisting);
+      api.fileSha256.mockResolvedValue("hash-of-a");
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      let saved;
+      await act(async () => {
+        saved = await result.current.save(new File(["%PDF-"], "Renamed.pdf"));
+      });
+      expect(api.uploadPdf).not.toHaveBeenCalled();
+      expect(saved).toBe(EXISTING);
+      expect(result.current.notice).toBe('Already in your library as "A.pdf".');
+      expect(result.current.error).toBeNull();
+    });
+
+    it("reports a duplicate the server found that the local list missed", async () => {
+      api.listPdfs.mockResolvedValue({ pdfs: [], usedBytes: 0, limitBytes: 100 });
+      api.uploadPdf.mockResolvedValue({ pdf: EXISTING, duplicate: true });
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await result.current.save(new File(["%PDF-"], "A.pdf"));
+      });
+      expect(result.current.notice).toBe('Already in your library as "A.pdf".');
+    });
+
+    it("still uploads if the fingerprint can't be computed", async () => {
+      api.listPdfs.mockResolvedValue(withExisting);
+      api.fileSha256.mockRejectedValue(new Error("no crypto"));
+      api.uploadPdf.mockResolvedValue({ pdf: { id: "new", name: "B.pdf", size: 1 }, duplicate: false });
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      await act(async () => {
+        await result.current.save(new File(["%PDF-"], "B.pdf"));
+      });
+      expect(api.uploadPdf).toHaveBeenCalled();
+      expect(result.current.notice).toBeNull();
+    });
+
+    it("clears the notice on the next save", async () => {
+      api.listPdfs.mockResolvedValue(withExisting);
+      api.fileSha256.mockResolvedValueOnce("hash-of-a").mockResolvedValue("other");
+      api.uploadPdf.mockResolvedValue({ pdf: { id: "new", name: "B.pdf", size: 1 }, duplicate: false });
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      await act(async () => {
+        await result.current.save(new File(["%PDF-"], "A.pdf"));
+      });
+      expect(result.current.notice).not.toBeNull();
+      await act(async () => {
+        await result.current.save(new File(["%PDF-"], "B.pdf"));
+      });
+      expect(result.current.notice).toBeNull();
     });
   });
 });

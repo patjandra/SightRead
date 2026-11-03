@@ -319,6 +319,7 @@ export default function ReaderPage() {
             usedBytes: library.usedBytes,
             limitBytes: library.limitBytes,
             error: library.error,
+            notice: library.notice,
             busy: library.busy,
             canSave: !!currentPdf && !openSavedId,
             activeId: openSavedId,

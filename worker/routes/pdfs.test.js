@@ -167,6 +167,113 @@ describe("validation", () => {
   });
 });
 
+describe("duplicate files", () => {
+  const ID_3 = "33333333-3333-4333-8333-333333333333";
+
+  it("returns the existing record for the same contents under another id and name", async () => {
+    const bytes = pdfBytes(300);
+    const first = await (await put(alice, ID_1, bytes, { name: "Etude.pdf" })).json();
+    expect(first.duplicate).toBe(false);
+
+    const again = await put(alice, ID_2, bytes, { name: "Copy of Etude.pdf" });
+    expect(again.status).toBe(200);
+    const body = await again.json();
+    expect(body.duplicate).toBe(true);
+    expect(body.pdf).toMatchObject({ id: ID_1, name: "Etude.pdf" });
+
+    expect(bucket.objects.size).toBe(1);
+    const { pdfs, usedBytes } = await list(alice);
+    expect(pdfs).toHaveLength(1);
+    expect(usedBytes).toBe(300);
+  });
+
+  it("keeps different contents separate even with the same name", async () => {
+    await put(alice, ID_1, pdfBytes(100), { name: "scan.pdf" });
+    const second = await (await put(alice, ID_2, pdfBytes(101), { name: "scan.pdf" })).json();
+    expect(second.duplicate).toBe(false);
+    expect((await list(alice)).pdfs).toHaveLength(2);
+  });
+
+  it("does not match another account's identical file", async () => {
+    await put(alice, ID_1, pdfBytes(100));
+    const res = await (await put(bob, ID_2, pdfBytes(100))).json();
+    expect(res.duplicate).toBe(false);
+    expect(res.pdf.id).toBe(ID_2);
+    expect(bucket.objects.size).toBe(2);
+  });
+
+  it("is still a duplicate when the account is full", async () => {
+    const bytes = pdfBytes(100);
+    await put(alice, ID_1, bytes);
+    db.raw
+      .prepare("INSERT INTO pdfs (user_id, id, name, size, r2_key, created_at) VALUES (?, ?, 'big', ?, 'k', 't')")
+      .run(alice.id, ID_3, MAX_USER_BYTES - 100);
+    const res = await put(alice, ID_2, bytes);
+    expect(res.status).toBe(200);
+    expect((await res.json()).duplicate).toBe(true);
+  });
+
+  it("can be saved again after the original is deleted", async () => {
+    const bytes = pdfBytes(100);
+    await put(alice, ID_1, bytes);
+    await call(alice, `/api/pdfs/${ID_1}`, { method: "DELETE" });
+    const res = await (await put(alice, ID_2, bytes)).json();
+    expect(res.duplicate).toBe(false);
+    expect(res.pdf.id).toBe(ID_2);
+  });
+
+  it("keeps re-sending the same id idempotent (not reported as a duplicate)", async () => {
+    await put(alice, ID_1, pdfBytes());
+    const res = await (await put(alice, ID_1, pdfBytes())).json();
+    expect(res.duplicate).toBe(false);
+    expect(bucket.objects.size).toBe(1);
+  });
+
+  it("lists each file's fingerprint", async () => {
+    await put(alice, ID_1, pdfBytes(100));
+    const { pdfs } = await list(alice);
+    expect(pdfs[0].sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("resolves two simultaneous saves of one file to a single stored copy", async () => {
+    const bytes = pdfBytes(100);
+    await put(alice, ID_1, bytes);
+    // The second request's duplicate check runs before the first row is visible.
+    let skipped = false;
+    const racing = {
+      ...db,
+      prepare(sql) {
+        if (!skipped && sql.includes("sha256 = ?")) {
+          skipped = true;
+          return { bind: () => ({ first: async () => null }) };
+        }
+        return db.prepare(sql);
+      },
+    };
+    const res = await app.request(
+      `${ORIGIN}/api/pdfs/${ID_2}`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: alice.cookie,
+          Origin: ORIGIN,
+          "X-Requested-With": "sightread",
+          "X-Filename": "Etude.pdf",
+          "Content-Length": String(bytes.byteLength),
+        },
+        body: bytes,
+      },
+      env(racing, bucket)
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.duplicate).toBe(true);
+    expect(body.pdf.id).toBe(ID_1);
+    expect(bucket.objects.size).toBe(1); // the loser's object was removed
+    expect((await list(alice)).pdfs).toHaveLength(1);
+  });
+});
+
 describe("isolation between users", () => {
   beforeEach(async () => {
     await put(alice, ID_1, pdfBytes());

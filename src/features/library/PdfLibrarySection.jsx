@@ -21,6 +21,7 @@ export default function PdfLibrarySection({
   usedBytes,
   limitBytes,
   error,
+  notice,
   busy,
   canSave,
   onSave,
@@ -45,6 +46,7 @@ export default function PdfLibrarySection({
         </button>
       )}
       {error && <p className="text-xs text-red-400 leading-snug">{error}</p>}
+      {notice && !error && <p className="text-xs text-slate-300 leading-snug">{notice}</p>}
 
       {showList && (
         <>
