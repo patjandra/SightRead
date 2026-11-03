@@ -42,3 +42,16 @@ export const signInWithGoogle = (credential) =>
   request("/google", { method: "POST", body: { credential } });
 
 export const signOut = () => request("/logout", { method: "POST" });
+
+/** Permanently deletes the account and everything stored for it. */
+export async function deleteAccount() {
+  const res = await fetch("/api/account", {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { "X-Requested-With": "sightread" },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new AuthApiError(data?.error?.message ?? "Request failed.", res.status, data?.error?.code);
+  }
+}

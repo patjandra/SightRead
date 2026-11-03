@@ -3,6 +3,7 @@ import { useGazeTracking } from "./hooks/useGazeTracking.js";
 import { useScrollControl } from "./hooks/useScrollControl.js";
 import { useLocalProfiles } from "./hooks/useLocalProfiles.js";
 import { mapRawToCalibratedY, isProfileCalibrated } from "./gaze/calibrationManager.js";
+import { usePdfLibrary } from "../library/usePdfLibrary.js";
 import PDFViewer from "./components/PDFViewer.jsx";
 import CalibrationScreen from "./components/CalibrationScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
@@ -23,12 +24,21 @@ export default function ReaderPage() {
   const [pdfUrl, setPdfUrl] = useState(null);
   const prevPdfUrlRef = useRef(null);
 
-  const handlePdfUpload = useCallback((file) => {
+  // What is open: the file, and the library id once it is saved to the account.
+  const [currentPdf, setCurrentPdf] = useState(null);
+
+  const showPdf = useCallback((file, meta) => {
     if (prevPdfUrlRef.current) URL.revokeObjectURL(prevPdfUrlRef.current);
     const url = URL.createObjectURL(file);
     prevPdfUrlRef.current = url;
     setPdfUrl(url);
+    setCurrentPdf({ file, ...meta });
   }, []);
+
+  const handlePdfUpload = useCallback(
+    (file) => showPdf(file, { name: file.name, savedId: null }),
+    [showPdf]
+  );
 
   useEffect(() => {
     return () => {
@@ -71,6 +81,43 @@ export default function ReaderPage() {
     onUnauthorized: refreshAuth,
   });
 
+  // ── PDF library ────────────────────────────────────────────────────────────
+  const library = usePdfLibrary({ user, onUnauthorized: refreshAuth });
+
+  // Same save gate as profiles: guests sign in first, then the open PDF uploads.
+  const handleSavePdf = useCallback(() => {
+    if (!currentPdf || currentPdf.savedId) return;
+    const { file } = currentPdf;
+    requireAuth(async () => {
+      try {
+        const saved = await library.save(file);
+        setCurrentPdf((cur) => (cur?.file === file ? { ...cur, savedId: saved.id } : cur));
+      } catch {
+        // library.error already holds the message for the panel
+      }
+    });
+  }, [currentPdf, requireAuth, library.save]);
+
+  const handleOpenSaved = useCallback(
+    async (pdf) => {
+      try {
+        showPdf(await library.open(pdf.id), { name: pdf.name, savedId: pdf.id });
+      } catch {
+        // library.error already holds the message for the panel
+      }
+    },
+    [library.open, showPdf]
+  );
+
+  const handleDeleteSaved = useCallback(
+    async (pdf) => {
+      await library.remove(pdf.id);
+      // The file stays open, but it is no longer in the account.
+      setCurrentPdf((cur) => (cur?.savedId === pdf.id ? { ...cur, savedId: null } : cur));
+    },
+    [library.remove]
+  );
+
   // The save gate: guests are asked to sign in first, then the profile uploads
   // (with the freshly signed-in user, since our own auth state is one step behind).
   const handleSaveProfileToAccount = useCallback(
@@ -108,6 +155,7 @@ export default function ReaderPage() {
       if (prevPdfUrlRef.current) URL.revokeObjectURL(prevPdfUrlRef.current);
       prevPdfUrlRef.current = null;
       setPdfUrl(null);
+      setCurrentPdf(null);
     }, [])
   );
 
@@ -254,6 +302,19 @@ export default function ReaderPage() {
           onTogglePanel={() => setPanelOpen((v) => !v)}
           onPdfUpload={handlePdfUpload}
           hasPdf={!!pdfUrl}
+          library={{
+            signedIn: !!user,
+            pdfs: library.pdfs,
+            usedBytes: library.usedBytes,
+            limitBytes: library.limitBytes,
+            error: library.error,
+            busy: library.busy,
+            canSave: !!currentPdf && !currentPdf.savedId,
+            activeId: currentPdf?.savedId ?? null,
+            onSave: handleSavePdf,
+            onOpen: handleOpenSaved,
+            onDelete: handleDeleteSaved,
+          }}
           profiles={profiles}
           selectedId={selectedId}
           selectedProfile={selectedProfile}

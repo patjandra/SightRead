@@ -21,7 +21,9 @@ function GuestAvatar() {
 
 /** Account controls for the side panel: sign in (guest) or identity + sign out. */
 export default function AccountSection() {
-  const { status, user, signOut, openSignIn } = useAuth();
+  const { status, user, signOut, deleteAccount, openSignIn } = useAuth();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const [signOutError, setSignOutError] = useState(null);
 
   async function handleSignOut() {
@@ -33,11 +35,20 @@ export default function AccountSection() {
     }
   }
 
+  async function handleDelete() {
+    setDeleteError(null);
+    try {
+      await deleteAccount();
+    } catch {
+      setDeleteError("Couldn't delete your account. Please try again.");
+    }
+  }
+
   if (status === "loading") return null;
 
   return (
     <section className="mt-auto pt-3 border-t border-slate-700 space-y-2">
-      {user ? (
+      {user && (
         <div className="flex items-center gap-2.5">
           {user.picture ? (
             <img
@@ -57,10 +68,34 @@ export default function AccountSection() {
             >
               Sign out
             </button>
+            {" · "}
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              className="text-[11px] text-slate-500 hover:text-red-400 underline underline-offset-2"
+            >
+              Delete account
+            </button>
             {signOutError && <p className="text-[11px] text-red-400">{signOutError}</p>}
           </div>
         </div>
-      ) : (
+      )}
+      {user && confirmingDelete && (
+        <div role="alertdialog" aria-label="Delete account" className="rounded-md border border-red-500/40 bg-red-500/10 p-2 space-y-1.5">
+          <p className="text-[11px] leading-snug">
+            This permanently deletes your account, saved PDFs and synced profiles. It can't be undone.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={handleDelete} className="text-[11px] bg-red-600 hover:bg-red-500 rounded px-2 py-0.5">
+              Delete everything
+            </button>
+            <button onClick={() => setConfirmingDelete(false)} className="text-[11px] text-slate-400 hover:text-white">
+              Cancel
+            </button>
+          </div>
+          {deleteError && <p className="text-[11px] text-red-400">{deleteError}</p>}
+        </div>
+      )}
+      {!user && (
         <div className="flex items-center gap-2.5">
           <GuestAvatar />
           <div className="min-w-0 flex-1">

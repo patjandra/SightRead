@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import ProfileSelector from "./ProfileSelector.jsx";
+import PdfLibrarySection from "../../library/PdfLibrarySection.jsx";
 import FacePreview from "./FacePreview.jsx";
 import AccountSection from "../../auth/AccountSection.jsx";
 import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
@@ -57,6 +58,7 @@ export default function ControlPanel({
   // PDF
   onPdfUpload,
   hasPdf,
+  library,
   // Profiles
   profiles,
   selectedId,
@@ -180,6 +182,7 @@ export default function ControlPanel({
           className="hidden"
           onChange={handleFileChange}
         />
+        {library && <PdfLibrarySection {...library} />}
       </section>
 
       {/* Camera status */}

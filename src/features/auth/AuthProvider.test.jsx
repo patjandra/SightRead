@@ -9,6 +9,7 @@ vi.mock("./authClient.js", () => ({
   getMe: vi.fn(),
   signInWithGoogle: vi.fn(),
   signOut: vi.fn(),
+  deleteAccount: vi.fn(),
 }));
 // Stand in for Google's button: clicking it "returns" a credential.
 vi.mock("./GoogleSignInButton.jsx", () => ({
@@ -229,6 +230,47 @@ describe("AuthProvider / requireAuth", () => {
     await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("signed-in"));
     fireEvent.click(screen.getByText("out"));
     await waitFor(() => expect(result).toBeInstanceOf(Error));
+    expect(screen.getByTestId("s")).toHaveTextContent("signed-in");
+  });
+});
+
+describe("deleteAccount", () => {
+  function DeleteHarness({ onError }) {
+    const { status, deleteAccount } = useAuth();
+    return (
+      <>
+        <p data-testid="s">{status}</p>
+        <button onClick={() => deleteAccount().catch(onError)}>delete</button>
+      </>
+    );
+  }
+  const renderDelete = (onError = () => {}) =>
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <DeleteHarness onError={onError} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+  it("returns to guest once the server has deleted the account", async () => {
+    client.getMe.mockResolvedValue({ user: USER });
+    client.deleteAccount.mockResolvedValue(undefined);
+    renderDelete();
+    await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("signed-in"));
+    fireEvent.click(screen.getByText("delete"));
+    await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("guest"));
+    expect(client.deleteAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays signed in and rejects when deletion fails", async () => {
+    client.getMe.mockResolvedValue({ user: USER });
+    client.deleteAccount.mockRejectedValue(new Error("boom"));
+    const onError = vi.fn();
+    renderDelete(onError);
+    await waitFor(() => expect(screen.getByTestId("s")).toHaveTextContent("signed-in"));
+    fireEvent.click(screen.getByText("delete"));
+    await waitFor(() => expect(onError).toHaveBeenCalled());
     expect(screen.getByTestId("s")).toHaveTextContent("signed-in");
   });
 });

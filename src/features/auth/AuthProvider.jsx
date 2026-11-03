@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useEffect, useRef, useState } from "react";
-import { getMe, signInWithGoogle, signOut as apiSignOut } from "./authClient.js";
+import { getMe, signInWithGoogle, signOut as apiSignOut, deleteAccount as apiDeleteAccount } from "./authClient.js";
 import SignInPrompt from "./SignInPrompt.jsx";
 
 export const AuthContext = createContext(null);
@@ -73,6 +73,13 @@ export default function AuthProvider({ children }) {
     setStatus("guest");
   }, []);
 
+  // Same as signing out once the server has removed the account.
+  const deleteAccount = useCallback(async () => {
+    await apiDeleteAccount();
+    setUser(null);
+    setStatus("guest");
+  }, []);
+
   const requireAuth = useCallback(
     (action) => {
       if (user) return action(user);
@@ -101,6 +108,7 @@ export default function AuthProvider({ children }) {
     refresh,
     completeSignIn,
     signOut,
+    deleteAccount,
     requireAuth,
     openSignIn,
   };
