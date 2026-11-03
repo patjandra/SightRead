@@ -6,6 +6,7 @@ import App from "./App.jsx";
 import AuthProvider from "./features/auth/AuthProvider.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import "./index.css";
+import { registerServiceWorker } from "./registerServiceWorker.js";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -23,3 +24,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+registerServiceWorker();
