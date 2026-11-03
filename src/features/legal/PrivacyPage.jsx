@@ -1,11 +1,10 @@
 import React from "react";
 import LegalLayout, { Section } from "./LegalLayout.jsx";
 
-// Keep in sync with what the app stores: update when cloud PDF storage
-// (Phase 3) and account deletion ship.
+// Keep in sync with what the app stores.
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" updated="November 2, 2026">
+    <LegalLayout title="Privacy Policy" updated="November 3, 2026">
       <p>
         SightRead is a tool for reading sheet music hands-free. This page
         explains what information it uses and where that information lives.
@@ -22,7 +21,14 @@ export default function PrivacyPage() {
       <Section title="Your sheet music">
         <p>
           PDFs you open are read by your browser and are not uploaded or stored
-          by us.
+          by us unless you choose to.
+        </p>
+        <p>
+          If you are signed in and choose "Save to account", we store a copy of
+          that PDF and its file name in private storage tied to your account, so
+          you can open it on your other devices. Only you can access it; we do
+          not share it or look through it. Saved PDFs are limited to 25 MB each
+          and 500 MB in total, and stay until you delete them.
         </p>
       </Section>
 
@@ -70,15 +76,18 @@ export default function PrivacyPage() {
 
       <Section title="Deleting your data">
         <p>
+          You can delete any saved PDF at any time; the stored file is removed
+          immediately.
+        </p>
+        <p>
           You can delete any saved profile at any time. This removes its name
           and calibration values from your account and, the next time they
           sync, from your other devices. We keep only a blank marker with a
           timestamp so those devices know to remove it.
         </p>
         <p>
-          You can sign out at any time. To delete your whole account, until a
-          delete button is available,
-          contact us at <a href="mailto:patjandra@gmail.com" className="underline hover:text-white">patjandra@gmail.com</a> and we will delete your account.
+          You can sign out at any time. "Delete account" in the side panel
+          permanently removes your account, saved PDFs, and synced profiles.
         </p>
       </Section>
 
