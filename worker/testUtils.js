@@ -82,6 +82,30 @@ export async function makeUser(db, sub, email = `${sub}@example.com`) {
   return { ...user, cookie: `__Host-sr_session=${token}` };
 }
 
-export function env(db) {
-  return { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID, SESSION_SECRET };
+/** An in-memory stand-in for an R2 bucket (put/get/delete/list by prefix). */
+export function fakeR2() {
+  const objects = new Map();
+  return {
+    objects,
+    async put(key, value) {
+      objects.set(key, new Uint8Array(value));
+    },
+    async get(key) {
+      const bytes = objects.get(key);
+      return bytes ? { body: new Blob([bytes]).stream() } : null;
+    },
+    async delete(keys) {
+      for (const key of Array.isArray(keys) ? keys : [keys]) objects.delete(key);
+    },
+    async list({ prefix = "" } = {}) {
+      return {
+        objects: [...objects.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })),
+        truncated: false,
+      };
+    },
+  };
+}
+
+export function env(db, bucket = fakeR2()) {
+  return { DB: db, PDFS: bucket, GOOGLE_CLIENT_ID: CLIENT_ID, SESSION_SECRET };
 }

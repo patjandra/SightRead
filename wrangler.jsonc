@@ -17,6 +17,9 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "sightread-local", "database_id": "local", "migrations_dir": "migrations" }
   ],
+  // PDF library. Locally wrangler simulates the bucket; it is only ever read
+  // through the Worker (never public).
+  "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-local" }],
   // Public value. Replace with your Google OAuth web client ID (also in .dev.vars for local dev).
   "vars": { "GOOGLE_CLIENT_ID": "649384260817-bb1kj82kblqg9ldrd8njk1klli2c7j1t.apps.googleusercontent.com" },
 
@@ -31,6 +34,7 @@
       "d1_databases": [
         { "binding": "DB", "database_name": "sightread-staging", "database_id": "3367c1c7-f6c4-459b-b9c4-c92f99fd4a9a", "migrations_dir": "migrations" }
       ],
+      "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-staging" }],
       "vars": { "GOOGLE_CLIENT_ID": "649384260817-97hc0jhbdh2fut25n05ccbgdgvijavnd.apps.googleusercontent.com" }
     },
     "production": {
@@ -43,6 +47,7 @@
       "d1_databases": [
         { "binding": "DB", "database_name": "sightread-production", "database_id": "REPLACE_WITH_PRODUCTION_DB_ID", "migrations_dir": "migrations" }
       ],
+      "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-production" }],
       "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_PRODUCTION_CLIENT_ID" }
     }
   }

@@ -3,6 +3,8 @@ import { ApiError, errorBody } from "./errors.js";
 import { csrf } from "./middleware/csrf.js";
 import auth from "./routes/auth.js";
 import calibrations from "./routes/calibrations.js";
+import pdfs from "./routes/pdfs.js";
+import account from "./routes/account.js";
 
 // Only /api/* reaches the Worker (see `run_worker_first` in wrangler.jsonc);
 // everything else is static assets.
@@ -18,6 +20,8 @@ export function createApp({ googleKeySet } = {}) {
   app.use("/api/*", csrf);
   app.route("/api/auth", auth);
   app.route("/api/calibrations", calibrations);
+  app.route("/api/pdfs", pdfs);
+  app.route("/api/account", account);
 
   app.notFound((c) =>
     c.json(errorBody("not_found", "No such endpoint."), 404)
