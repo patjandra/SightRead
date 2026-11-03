@@ -119,9 +119,21 @@ export async function pushRecord({ api, store, ownerId, record }) {
  */
 export async function syncProfiles({ api, store, ownerId }) {
   const remote = await api.fetchProfiles();
-  const plan = planSync(await store.getAllRecords(), remote, ownerId);
+  const snapshot = await store.getAllRecords();
+  const plan = planSync(snapshot, remote, ownerId);
+  const seen = new Map(snapshot.map((r) => [r.id, r]));
 
-  for (const record of plan.adopt) await store.putRecord(record);
+  for (const record of plan.adopt) {
+    // The user may have edited since the snapshot; never overwrite that with
+    // older server data. It stays pending and is pushed on the next sync.
+    const was = seen.get(record.id);
+    const now = await store.getRecord(record.id);
+    const changed = was
+      ? !now || now.updatedAt !== was.updatedAt || now.syncState !== was.syncState || !!now.deletedAt !== !!was.deletedAt
+      : !!now;
+    if (changed) continue;
+    await store.putRecord(record);
+  }
   for (const id of plan.removeLocal) await store.removeRecord(id);
 
   const toSend = [

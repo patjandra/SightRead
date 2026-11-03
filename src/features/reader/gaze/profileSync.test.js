@@ -221,3 +221,29 @@ describe("createSerializer", () => {
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected", "fulfilled"]);
   });
 });
+
+describe("syncProfiles racing with local edits", () => {
+  it("does not overwrite an edit made after the snapshot was taken", async () => {
+    const records = new Map([["a", local("a", { name: "old", updatedAt: T(1) })]]);
+    const store = {
+      // Snapshot is taken here; the user then edits before sync applies its plan.
+      getAllRecords: vi.fn(async () => {
+        const snapshot = [...records.values()].map((r) => ({ ...r }));
+        records.set("a", local("a", { name: "mine", updatedAt: T(5), syncState: "pending" }));
+        return snapshot;
+      }),
+      getRecord: vi.fn(async (id) => records.get(id)),
+      putRecord: vi.fn(async (r) => void records.set(r.id, r)),
+      removeRecord: vi.fn(async (id) => void records.delete(id)),
+    };
+    const api = {
+      fetchProfiles: vi.fn(async () => [remote("a", { name: "cloud", updatedAt: T(3) })]),
+      pushProfile: vi.fn(async (r) => remote(r.id, { name: r.name, updatedAt: r.updatedAt })),
+      deleteRemoteProfile: vi.fn(),
+    };
+
+    await syncProfiles({ api, store, ownerId: ME });
+
+    expect(records.get("a").name).toBe("mine");
+  });
+});
