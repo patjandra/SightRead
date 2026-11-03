@@ -29,7 +29,7 @@
         "run_worker_first": ["/api/*"]
       },
       "d1_databases": [
-        { "binding": "DB", "database_name": "sightread-staging", "database_id": "REPLACE_WITH_STAGING_DB_ID", "migrations_dir": "migrations" }
+        { "binding": "DB", "database_name": "sightread-staging", "database_id": "3367c1c7-f6c4-459b-b9c4-c92f99fd4a9a", "migrations_dir": "migrations" }
       ],
       "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_STAGING_CLIENT_ID" }
     },
