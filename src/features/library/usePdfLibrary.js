@@ -172,11 +172,19 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
 
   /** Upload a file; resolves to the stored record. Rejects (and sets `error`) on failure. */
   const save = useCallback(
-    async (file) => {
+    async (file, accountUser = null) => {
       setError(null);
       setBusy(true);
       try {
         const pdf = await api.uploadPdf(crypto.randomUUID(), file);
+        // The file is already in hand, so keep a copy for offline use right away.
+        // `accountUser` is passed when saving as the continuation of sign-in, when
+        // this hook's own user is still the pre-sign-in one.
+        const uid = accountUser?.id ?? cacheUserId;
+        if (uid) {
+          await quietly(cache.putCached(uid, pdf, file));
+          await quietly(refreshCached(uid));
+        }
         await reload();
         return pdf;
       } catch (err) {
@@ -185,7 +193,7 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
         setBusy(false);
       }
     },
-    [reload, fail]
+    [reload, fail, cacheUserId, refreshCached]
   );
 
   /**

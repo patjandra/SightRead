@@ -95,9 +95,9 @@ export default function ReaderPage() {
   const handleSavePdf = useCallback(() => {
     if (!currentPdf || openSavedId) return;
     const { file } = currentPdf;
-    requireAuth(async () => {
+    requireAuth(async (accountUser) => {
       try {
-        const saved = await library.save(file);
+        const saved = await library.save(file, accountUser);
         setCurrentPdf((cur) => (cur?.file === file ? { ...cur, savedId: saved.id } : cur));
       } catch {
         // library.error already holds the message for the panel

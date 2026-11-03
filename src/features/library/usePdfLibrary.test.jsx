@@ -179,6 +179,44 @@ describe("usePdfLibrary", () => {
       expect(api.downloadPdf).not.toHaveBeenCalled();
     });
 
+    it("keeps a copy of a file as soon as it is saved, no second click needed", async () => {
+      api.listPdfs.mockResolvedValue({ pdfs: [], usedBytes: 0, limitBytes: 100 });
+      api.uploadPdf.mockResolvedValue({ id: "new", name: "A.pdf", size: 5 });
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(1));
+      const file = new File(["%PDF-"], "A.pdf");
+      await act(async () => {
+        await result.current.save(file);
+      });
+      expect(cache.putCached).toHaveBeenCalledWith("u1", { id: "new", name: "A.pdf", size: 5 }, file);
+      expect(api.downloadPdf).not.toHaveBeenCalled();
+    });
+
+    it("caches under the user passed in when saving right after sign-in", async () => {
+      api.uploadPdf.mockResolvedValue({ id: "new", name: "A.pdf", size: 5 });
+      api.listPdfs.mockResolvedValue(LIST);
+      const { result } = renderHook(() => usePdfLibrary({ user: null, authStatus: "guest" }));
+      const file = new File(["%PDF-"], "A.pdf");
+      await act(async () => {
+        await result.current.save(file, USER).catch(() => {});
+      });
+      expect(cache.putCached).toHaveBeenCalledWith("u1", expect.objectContaining({ id: "new" }), file);
+    });
+
+    it("a failed copy never fails the save", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      api.uploadPdf.mockResolvedValue({ id: "new", name: "A.pdf", size: 5 });
+      cache.putCached.mockRejectedValue(new Error("quota"));
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      let saved;
+      await act(async () => {
+        saved = await result.current.save(new File(["%PDF-"], "A.pdf"));
+      });
+      expect(saved.id).toBe("new");
+    });
+
     it("downloads on a miss and keeps a copy for next time", async () => {
       api.listPdfs.mockResolvedValue(LIST);
       api.downloadPdf.mockResolvedValue(BLOB);
