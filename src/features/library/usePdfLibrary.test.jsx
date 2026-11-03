@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 
 vi.mock("./pdfApi.js", () => ({
@@ -92,5 +92,39 @@ describe("usePdfLibrary", () => {
     });
     expect(api.deletePdf).toHaveBeenCalledWith("a");
     expect(result.current.pdfs).toEqual([]);
+  });
+
+  describe("picking up changes from other devices", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("re-fetches on the poll interval and when the window regains focus", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await act(async () => {});
+      expect(result.current.pdfs).toHaveLength(1);
+      expect(api.listPdfs).toHaveBeenCalledTimes(1);
+
+      api.listPdfs.mockResolvedValue({ pdfs: [], usedBytes: 0, limitBytes: 100 });
+      await act(async () => {
+        vi.advanceTimersByTime(15_000);
+      });
+      expect(result.current.pdfs).toEqual([]);
+
+      api.listPdfs.mockResolvedValue(LIST);
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(result.current.pdfs).toHaveLength(1);
+    });
+
+    it("does not poll for a guest", async () => {
+      renderHook(() => usePdfLibrary({ user: null }));
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(api.listPdfs).not.toHaveBeenCalled();
+    });
   });
 });

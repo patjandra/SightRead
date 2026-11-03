@@ -84,9 +84,15 @@ export default function ReaderPage() {
   // ── PDF library ────────────────────────────────────────────────────────────
   const library = usePdfLibrary({ user, onUnauthorized: refreshAuth });
 
+  // A PDF deleted from another device is no longer "saved", even if still open here.
+  const openSavedId =
+    currentPdf?.savedId && library.pdfs.some((p) => p.id === currentPdf.savedId)
+      ? currentPdf.savedId
+      : null;
+
   // Same save gate as profiles: guests sign in first, then the open PDF uploads.
   const handleSavePdf = useCallback(() => {
-    if (!currentPdf || currentPdf.savedId) return;
+    if (!currentPdf || openSavedId) return;
     const { file } = currentPdf;
     requireAuth(async () => {
       try {
@@ -96,7 +102,7 @@ export default function ReaderPage() {
         // library.error already holds the message for the panel
       }
     });
-  }, [currentPdf, requireAuth, library.save]);
+  }, [currentPdf, openSavedId, requireAuth, library.save]);
 
   const handleOpenSaved = useCallback(
     async (pdf) => {
@@ -309,8 +315,8 @@ export default function ReaderPage() {
             limitBytes: library.limitBytes,
             error: library.error,
             busy: library.busy,
-            canSave: !!currentPdf && !currentPdf.savedId,
-            activeId: currentPdf?.savedId ?? null,
+            canSave: !!currentPdf && !openSavedId,
+            activeId: openSavedId,
             onSave: handleSavePdf,
             onOpen: handleOpenSaved,
             onDelete: handleDeleteSaved,

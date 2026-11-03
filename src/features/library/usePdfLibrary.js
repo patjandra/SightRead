@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import * as api from "./pdfApi.js";
 
+const POLL_MS = 15_000;
+const MIN_GAP_MS = 2_000;
+
 /**
  * The signed-in user's saved PDFs. Guests have no library: the list is empty
  * and nothing is requested. `onUnauthorized` is called when the API says the
@@ -52,6 +55,29 @@ export function usePdfLibrary({ user, onUnauthorized }) {
       cancelled = true;
     };
   }, [userId, onUnauthorized]);
+
+  // Pick up changes made on other devices: re-fetch when the tab regains focus
+  // and every POLL_MS while it is visible. Failures are silent; the next tick retries.
+  useEffect(() => {
+    if (!userId) return;
+    let last = Date.now();
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - last < MIN_GAP_MS) return;
+      last = Date.now();
+      reload().catch((err) => {
+        if (err.status === 401) onUnauthorized?.();
+      });
+    };
+    const timer = setInterval(refreshIfVisible, POLL_MS);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [userId, reload, onUnauthorized]);
 
   /** Upload a file; resolves to the stored record. Rejects (and sets `error`) on failure. */
   const save = useCallback(
