@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "./pdfApi.js";
+import { useOnline } from "../../hooks/useOnline.js";
 
 const POLL_MS = 15_000;
 const MIN_GAP_MS = 2_000;
@@ -10,6 +11,7 @@ const MIN_GAP_MS = 2_000;
  * session is gone, so the caller can re-check it.
  */
 export function usePdfLibrary({ user, onUnauthorized }) {
+  const online = useOnline();
   const userId = user?.id ?? null;
   const [pdfs, setPdfs] = useState([]);
   const [usage, setUsage] = useState({ usedBytes: 0, limitBytes: 0 });
@@ -59,7 +61,7 @@ export function usePdfLibrary({ user, onUnauthorized }) {
   // Pick up changes made on other devices: re-fetch when the tab regains focus
   // and every POLL_MS while it is visible. Failures are silent; the next tick retries.
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !online) return;
     let last = Date.now();
     const refreshIfVisible = () => {
       if (document.visibilityState !== "visible") return;
@@ -77,7 +79,19 @@ export function usePdfLibrary({ user, onUnauthorized }) {
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [userId, reload, onUnauthorized]);
+  }, [userId, online, reload, onUnauthorized]);
+
+  // Back online: refresh straight away rather than waiting for the next tick.
+  const wasOnlineRef = useRef(online);
+  useEffect(() => {
+    const cameBack = online && !wasOnlineRef.current;
+    wasOnlineRef.current = online;
+    if (cameBack && userId) {
+      reload().catch((err) => {
+        if (err.status === 401) onUnauthorized?.();
+      });
+    }
+  }, [online, userId, reload, onUnauthorized]);
 
   /** Upload a file; resolves to the stored record. Rejects (and sets `error`) on failure. */
   const save = useCallback(

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import * as store from "../gaze/profileStore.js";
 import * as api from "../gaze/profileApi.js";
 import { pushRecord, syncProfiles, createSerializer } from "../gaze/profileSync.js";
+import { useOnline } from "../../../hooks/useOnline.js";
 
 // Re-sync when the tab regains focus, but not more often than this.
 const FOCUS_SYNC_MIN_INTERVAL_MS = 30_000;
@@ -37,6 +38,7 @@ export function useLocalProfiles({
   // Guest-local profiles offered for upload right after a first sign-in.
   const [uploadOffer, setUploadOffer] = useState(null);
 
+  const online = useOnline();
   const userId = user?.id ?? null;
   const signedIn = authStatus === "signed-in" && !!userId;
 
@@ -174,6 +176,17 @@ export function useLocalProfiles({
     };
   }, [signedIn, userId, sync]);
 
+  // Back online: push whatever queued up while offline, without waiting for
+  // the focus throttle.
+  const wasOnlineRef = useRef(online);
+  useEffect(() => {
+    const cameBack = online && !wasOnlineRef.current;
+    wasOnlineRef.current = online;
+    if (cameBack && signedIn) sync(userId);
+  }, [online, signedIn, userId, sync]);
+
+  const pendingCount = profiles.filter((p) => p.ownerId && p.syncState === "pending").length;
+
   const selectedProfile = profiles.find((p) => p.id === selectedId) || null;
 
   const selectProfile = useCallback((id) => {
@@ -257,6 +270,7 @@ export function useLocalProfiles({
     selectedProfile,
     ready,
     syncStatus,
+    pendingCount,
     uploadOffer,
     selectProfile,
     addProfile,

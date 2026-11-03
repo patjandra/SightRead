@@ -276,3 +276,28 @@ describe("syncing on focus", () => {
     spy.mockRestore();
   });
 });
+
+describe("reconnecting", () => {
+  it("counts pending changes and pushes them as soon as the network returns", async () => {
+    api.pushProfile.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = mount(signedIn(ALICE));
+    await waitFor(() => expect(api.fetchProfiles).toHaveBeenCalled());
+    await act(() => result.current.addProfile("Piano", POINTS));
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+
+    act(() => void window.dispatchEvent(new Event("offline")));
+    api.pushProfile.mockImplementation(async (r) => ({ ...remoteProfile(r.id), updatedAt: r.updatedAt }));
+    act(() => void window.dispatchEvent(new Event("online")));
+
+    await waitFor(() => expect(result.current.pendingCount).toBe(0));
+    expect(result.current.profiles[0].syncState).toBe("synced");
+    expect(result.current.syncStatus).toBe("idle");
+  });
+
+  it("does not count guest profiles as waiting", async () => {
+    const { result } = mount(guest);
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    await act(() => result.current.addProfile("Local", POINTS));
+    expect(result.current.pendingCount).toBe(0);
+  });
+});

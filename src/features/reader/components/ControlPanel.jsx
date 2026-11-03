@@ -3,6 +3,7 @@ import ProfileSelector from "./ProfileSelector.jsx";
 import PdfLibrarySection from "../../library/PdfLibrarySection.jsx";
 import FacePreview from "./FacePreview.jsx";
 import AccountSection from "../../auth/AccountSection.jsx";
+import OfflineBadge from "./OfflineBadge.jsx";
 import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
 import {
   isProfileCalibrated,
@@ -67,6 +68,7 @@ export default function ControlPanel({
   onDeleteProfile,
   onCreateProfile,
   syncStatus,
+  pendingCount,
   onSaveProfileToAccount,
   onRetrySync,
   // Calibration
@@ -216,6 +218,7 @@ export default function ControlPanel({
       {/* Profile selector */}
       <section className="space-y-1.5">
         <SectionLabel>Profile</SectionLabel>
+        <OfflineBadge pendingCount={pendingCount} />
         <ProfileSelector
           profiles={profiles}
           selectedId={selectedId}

@@ -69,6 +69,7 @@ export default function ReaderPage() {
     updateSelectedProfile,
     removeProfile,
     syncStatus,
+    pendingCount,
     saveToAccount,
     uploadOffer,
     confirmUploadOffer,
@@ -328,6 +329,7 @@ export default function ReaderPage() {
           onDeleteProfile={removeProfile}
           onCreateProfile={handleCreateProfile}
           syncStatus={syncStatus}
+          pendingCount={pendingCount}
           onSaveProfileToAccount={handleSaveProfileToAccount}
           onRetrySync={retrySync}
           onStartCalibration={handleStartCalibration}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor, act } from "@testing-library/react";
+import { renderHook, waitFor, act, cleanup } from "@testing-library/react";
 
 vi.mock("./pdfApi.js", () => ({
   listPdfs: vi.fn(),
@@ -18,6 +18,7 @@ const LIST = { pdfs: [{ id: "a", name: "A.pdf", size: 10 }], usedBytes: 10, limi
 beforeEach(() => {
   vi.resetAllMocks();
 });
+afterEach(cleanup);
 
 describe("usePdfLibrary", () => {
   it("makes no requests for a guest", () => {
@@ -126,5 +127,18 @@ describe("usePdfLibrary", () => {
       });
       expect(api.listPdfs).not.toHaveBeenCalled();
     });
+  });
+
+  it("refreshes when the network returns and stops polling while offline", async () => {
+    api.listPdfs.mockResolvedValue(LIST);
+    renderHook(() => usePdfLibrary({ user: USER }));
+    await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(1));
+
+    act(() => void window.dispatchEvent(new Event("offline")));
+    act(() => void window.dispatchEvent(new Event("focus")));
+    expect(api.listPdfs).toHaveBeenCalledTimes(1); // no polling while offline
+
+    act(() => void window.dispatchEvent(new Event("online")));
+    await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(2));
   });
 });
