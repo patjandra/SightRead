@@ -13,7 +13,11 @@ const formatSize = (bytes) =>
  */
 export default function PdfLibrarySection({
   signedIn,
+  showList = signedIn,
   pdfs,
+  offlineCount = 0,
+  offlineBytes = 0,
+  onClearOffline,
   usedBytes,
   limitBytes,
   error,
@@ -42,7 +46,7 @@ export default function PdfLibrarySection({
       )}
       {error && <p className="text-xs text-red-400 leading-snug">{error}</p>}
 
-      {signedIn && (
+      {showList && (
         <>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 pt-1">
             Your library
@@ -78,7 +82,10 @@ export default function PdfLibrarySection({
                     title={`Open ${pdf.name}`}
                   >
                     <span className="block truncate">{pdf.name}</span>
-                    <span className="text-[10px] text-slate-500">{formatSize(pdf.size)}</span>
+                    <span className="text-[10px] text-slate-500">
+                      {formatSize(pdf.size)}
+                      {pdf.offline && " · Saved offline"}
+                    </span>
                   </button>
                   <button
                     onClick={() => onDelete(pdf)}
@@ -92,6 +99,20 @@ export default function PdfLibrarySection({
               ))}
             </ul>
             </>
+          )}
+          {offlineCount > 0 && (
+            <p className="text-[10px] text-slate-500 flex items-center justify-between gap-2">
+              <span>
+                Kept on this device: {offlineCount} {offlineCount === 1 ? "file" : "files"},{" "}
+                {formatSize(offlineBytes)}
+              </span>
+              <button
+                onClick={onClearOffline}
+                className="underline hover:text-slate-300 shrink-0"
+              >
+                Clear
+              </button>
+            </p>
           )}
           {limitBytes > 0 && (
             <div>

@@ -9,7 +9,19 @@ vi.mock("./pdfApi.js", () => ({
   deletePdf: vi.fn(),
 }));
 
+vi.mock("./offlineCache.js", () => ({
+  listCached: vi.fn(),
+  getCached: vi.fn(),
+  putCached: vi.fn(),
+  removeCached: vi.fn(),
+  retainOnly: vi.fn(),
+  purgeOtherUsers: vi.fn(),
+  clearCache: vi.fn(),
+  getLastCachedUser: vi.fn(),
+}));
+
 import * as api from "./pdfApi.js";
+import * as cache from "./offlineCache.js";
 import { usePdfLibrary } from "./usePdfLibrary.js";
 
 const USER = { id: "u1" };
@@ -17,6 +29,14 @@ const LIST = { pdfs: [{ id: "a", name: "A.pdf", size: 10 }], usedBytes: 10, limi
 
 beforeEach(() => {
   vi.resetAllMocks();
+  cache.listCached.mockResolvedValue([]);
+  cache.getCached.mockResolvedValue(null);
+  cache.putCached.mockResolvedValue(true);
+  cache.removeCached.mockResolvedValue();
+  cache.retainOnly.mockResolvedValue();
+  cache.purgeOtherUsers.mockResolvedValue();
+  cache.clearCache.mockResolvedValue();
+  cache.getLastCachedUser.mockResolvedValue(null);
 });
 afterEach(cleanup);
 
@@ -140,5 +160,128 @@ describe("usePdfLibrary", () => {
 
     act(() => void window.dispatchEvent(new Event("online")));
     await waitFor(() => expect(api.listPdfs).toHaveBeenCalledTimes(2));
+  });
+
+  describe("offline copies", () => {
+    const BLOB = new Blob(["%PDF-"]);
+
+    it("opens the copy on this device without downloading", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      cache.getCached.mockResolvedValue(BLOB);
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      let got;
+      await act(async () => {
+        got = await result.current.open("a");
+      });
+      expect(got).toBe(BLOB);
+      expect(cache.getCached).toHaveBeenCalledWith("u1", "a");
+      expect(api.downloadPdf).not.toHaveBeenCalled();
+    });
+
+    it("downloads on a miss and keeps a copy for next time", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      api.downloadPdf.mockResolvedValue(BLOB);
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      await act(async () => {
+        await result.current.open("a");
+      });
+      expect(cache.putCached).toHaveBeenCalledWith("u1", LIST.pdfs[0], BLOB);
+    });
+
+    it("still opens the PDF if keeping a copy fails", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      api.downloadPdf.mockResolvedValue(BLOB);
+      cache.putCached.mockRejectedValue(new Error("quota"));
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      let got;
+      await act(async () => {
+        got = await result.current.open("a");
+      });
+      expect(got).toBe(BLOB);
+    });
+
+    it("says so when an uncached PDF is opened offline", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      api.downloadPdf.mockRejectedValue(new TypeError("Failed to fetch"));
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      await act(async () => {
+        await result.current.open("a").catch(() => {});
+      });
+      expect(result.current.error).toBe("This PDF isn't available offline.");
+    });
+
+    it("marks cached files and drops copies of files deleted elsewhere", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      cache.listCached.mockResolvedValue([{ id: "a", name: "A.pdf", size: 10, lastOpenedAt: 1 }]);
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs[0]?.offline).toBe(true));
+      expect(cache.purgeOtherUsers).toHaveBeenCalledWith("u1");
+      expect(cache.retainOnly).toHaveBeenCalledWith("u1", ["a"]);
+      expect(result.current).toMatchObject({ offlineCount: 1, offlineBytes: 10 });
+    });
+
+    it("deleting a PDF removes its copy", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      api.deletePdf.mockResolvedValue();
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      await act(async () => {
+        await result.current.remove("a");
+      });
+      expect(cache.removeCached).toHaveBeenCalledWith("u1", "a");
+    });
+
+    it("falls back to the cached list when the server can't be reached", async () => {
+      api.listPdfs.mockRejectedValue(new TypeError("Failed to fetch"));
+      cache.listCached.mockResolvedValue([{ id: "a", name: "A.pdf", size: 10, lastOpenedAt: 1 }]);
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      expect(result.current.fromCache).toBe(true);
+      expect(result.current.error).toMatch(/Offline/);
+    });
+
+    it("shows the last account's files when the session can't be checked", async () => {
+      cache.getLastCachedUser.mockResolvedValue("u1");
+      cache.listCached.mockResolvedValue([{ id: "a", name: "A.pdf", size: 10, lastOpenedAt: 1 }]);
+      const { result } = renderHook(() =>
+        usePdfLibrary({ user: null, authStatus: "guest", sessionUnknown: true })
+      );
+      await waitFor(() => expect(result.current.pdfs).toHaveLength(1));
+      expect(result.current.showList).toBe(true);
+      expect(cache.clearCache).not.toHaveBeenCalled();
+      expect(api.listPdfs).not.toHaveBeenCalled();
+    });
+
+    it("clears everything once signed out is confirmed, but not when the check just failed", async () => {
+      renderHook(() => usePdfLibrary({ user: null, authStatus: "guest", sessionUnknown: true }));
+      await Promise.resolve();
+      expect(cache.clearCache).not.toHaveBeenCalled();
+
+      renderHook(() => usePdfLibrary({ user: null, authStatus: "guest", sessionUnknown: false }));
+      await waitFor(() => expect(cache.clearCache).toHaveBeenCalledTimes(1));
+    });
+
+    it("does not clear while the session is still loading", async () => {
+      renderHook(() => usePdfLibrary({ user: null, authStatus: "loading" }));
+      await Promise.resolve();
+      expect(cache.clearCache).not.toHaveBeenCalled();
+    });
+
+    it("clearOffline empties the cache and the count", async () => {
+      api.listPdfs.mockResolvedValue(LIST);
+      cache.listCached.mockResolvedValue([{ id: "a", name: "A.pdf", size: 10, lastOpenedAt: 1 }]);
+      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
+      await waitFor(() => expect(result.current.offlineCount).toBe(1));
+      await act(async () => {
+        await result.current.clearOffline();
+      });
+      expect(cache.clearCache).toHaveBeenCalled();
+      expect(result.current.offlineCount).toBe(0);
+    });
   });
 });

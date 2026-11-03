@@ -83,7 +83,7 @@ export default function ReaderPage() {
   });
 
   // ── PDF library ────────────────────────────────────────────────────────────
-  const library = usePdfLibrary({ user, onUnauthorized: refreshAuth });
+  const library = usePdfLibrary({ user, authStatus, sessionUnknown, onUnauthorized: refreshAuth });
 
   // A PDF deleted from another device is no longer "saved", even if still open here.
   const openSavedId =
@@ -311,7 +311,11 @@ export default function ReaderPage() {
           hasPdf={!!pdfUrl}
           library={{
             signedIn: !!user,
+            showList: library.showList,
             pdfs: library.pdfs,
+            offlineCount: library.offlineCount,
+            offlineBytes: library.offlineBytes,
+            onClearOffline: library.clearOffline,
             usedBytes: library.usedBytes,
             limitBytes: library.limitBytes,
             error: library.error,

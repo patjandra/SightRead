@@ -83,4 +83,31 @@ describe("PdfLibrarySection", () => {
       expect(screen.getByText('No PDFs match "zzz".')).toBeInTheDocument();
     });
   });
+
+  it("marks files kept on this device and lets the user clear them", () => {
+    const onClearOffline = vi.fn();
+    render(
+      <PdfLibrarySection
+        {...base}
+        pdfs={[{ ...base.pdfs[0], offline: true }]}
+        offlineCount={1}
+        offlineBytes={3 * 1024 * 1024}
+        onClearOffline={onClearOffline}
+      />
+    );
+    expect(screen.getByText(/Saved offline/)).toBeInTheDocument();
+    expect(screen.getByText(/Kept on this device: 1 file, 3.0 MB/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Clear"));
+    expect(onClearOffline).toHaveBeenCalled();
+  });
+
+  it("shows nothing about offline files when there are none", () => {
+    render(<PdfLibrarySection {...base} />);
+    expect(screen.queryByText(/Kept on this device/)).not.toBeInTheDocument();
+  });
+
+  it("lists cached files when the session can't be confirmed (signedIn false, showList true)", () => {
+    render(<PdfLibrarySection {...base} signedIn={false} showList canSave={false} />);
+    expect(screen.getByText("Etude.pdf")).toBeInTheDocument();
+  });
 });
