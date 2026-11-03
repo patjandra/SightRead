@@ -31,7 +31,7 @@
       "d1_databases": [
         { "binding": "DB", "database_name": "sightread-staging", "database_id": "3367c1c7-f6c4-459b-b9c4-c92f99fd4a9a", "migrations_dir": "migrations" }
       ],
-      "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_STAGING_CLIENT_ID" }
+      "vars": { "GOOGLE_CLIENT_ID": "649384260817-97hc0jhbdh2fut25n05ccbgdgvijavnd.apps.googleusercontent.com" }
     },
     "production": {
       "name": "sightread-production",
