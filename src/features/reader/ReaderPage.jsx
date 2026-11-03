@@ -315,7 +315,6 @@ export default function ReaderPage() {
             pdfs: library.pdfs,
             offlineCount: library.offlineCount,
             offlineBytes: library.offlineBytes,
-            onClearOffline: library.clearOffline,
             usedBytes: library.usedBytes,
             limitBytes: library.limitBytes,
             error: library.error,

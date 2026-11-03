@@ -17,7 +17,6 @@ export default function PdfLibrarySection({
   pdfs,
   offlineCount = 0,
   offlineBytes = 0,
-  onClearOffline,
   usedBytes,
   limitBytes,
   error,
@@ -103,17 +102,9 @@ export default function PdfLibrarySection({
             </>
           )}
           {offlineCount > 0 && (
-            <p className="text-[10px] text-slate-500 flex items-center justify-between gap-2">
-              <span>
-                Kept on this device: {offlineCount} {offlineCount === 1 ? "file" : "files"},{" "}
-                {formatSize(offlineBytes)}
-              </span>
-              <button
-                onClick={onClearOffline}
-                className="underline hover:text-slate-300 shrink-0"
-              >
-                Clear
-              </button>
+            <p className="text-[10px] text-slate-500">
+              Kept on this device: {offlineCount} {offlineCount === 1 ? "file" : "files"},{" "}
+              {formatSize(offlineBytes)}
             </p>
           )}
           {limitBytes > 0 && (

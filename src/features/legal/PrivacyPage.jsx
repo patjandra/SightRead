@@ -33,9 +33,9 @@ export default function PrivacyPage() {
         <p>
           When you open a saved PDF, a copy is also kept in your browser on that
           device so it opens without a connection (up to 100 MB; the least
-          recently opened are removed first). The side panel lists these and has
-          a "Clear" button. They are removed when you sign out, delete the PDF,
-          or delete your account. If you are offline when you open the app, the
+          recently opened are removed first). The side panel shows how many are
+          kept. They are removed when you sign out, delete the PDF, or delete
+          your account. If you are offline when you open the app, the
           copies kept for the last signed-in account can still be opened on that
           device.
         </p>

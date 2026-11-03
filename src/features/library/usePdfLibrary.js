@@ -252,12 +252,6 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
     [reload, fail, cacheUserId]
   );
 
-  /** Delete every copy kept on this device (the saved PDFs stay in the account). */
-  const clearOffline = useCallback(async () => {
-    await cache.clearCache();
-    setCached(new Map());
-  }, []);
-
   const offlineBytes = [...cached.values()].reduce((n, c) => n + c.size, 0);
 
   return {
@@ -274,6 +268,5 @@ export function usePdfLibrary({ user, authStatus = "loading", sessionUnknown = f
     save,
     open,
     remove,
-    clearOffline,
   };
 }

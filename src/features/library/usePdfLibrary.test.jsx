@@ -312,17 +312,6 @@ describe("usePdfLibrary", () => {
       expect(cache.clearCache).not.toHaveBeenCalled();
     });
 
-    it("clearOffline empties the cache and the count", async () => {
-      api.listPdfs.mockResolvedValue(LIST);
-      cache.listCached.mockResolvedValue([{ id: "a", name: "A.pdf", size: 10, lastOpenedAt: 1 }]);
-      const { result } = renderHook(() => usePdfLibrary({ user: USER }));
-      await waitFor(() => expect(result.current.offlineCount).toBe(1));
-      await act(async () => {
-        await result.current.clearOffline();
-      });
-      expect(cache.clearCache).toHaveBeenCalled();
-      expect(result.current.offlineCount).toBe(0);
-    });
   });
 
   describe("duplicate files", () => {

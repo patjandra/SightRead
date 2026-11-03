@@ -84,21 +84,18 @@ describe("PdfLibrarySection", () => {
     });
   });
 
-  it("marks files kept on this device and lets the user clear them", () => {
-    const onClearOffline = vi.fn();
+  it("marks files kept on this device and shows how many", () => {
     render(
       <PdfLibrarySection
         {...base}
         pdfs={[{ ...base.pdfs[0], offline: true }]}
         offlineCount={1}
         offlineBytes={3 * 1024 * 1024}
-        onClearOffline={onClearOffline}
       />
     );
     expect(screen.getByText(/Saved offline/)).toBeInTheDocument();
     expect(screen.getByText(/Kept on this device: 1 file, 3.0 MB/)).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Clear"));
-    expect(onClearOffline).toHaveBeenCalled();
+    expect(screen.queryByText("Clear")).not.toBeInTheDocument();
   });
 
   it("shows nothing about offline files when there are none", () => {
