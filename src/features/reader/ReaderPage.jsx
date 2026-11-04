@@ -93,7 +93,7 @@ export default function ReaderPage() {
 
   // Same save gate as profiles: guests sign in first, then the open PDF uploads.
   const handleSavePdf = useCallback(() => {
-    if (!currentPdf || openSavedId) return;
+    if (!currentPdf || openSavedId || currentPdf.fromLibrary) return;
     const { file } = currentPdf;
     requireAuth(async (accountUser) => {
       try {
@@ -108,7 +108,7 @@ export default function ReaderPage() {
   const handleOpenSaved = useCallback(
     async (pdf) => {
       try {
-        showPdf(await library.open(pdf.id), { name: pdf.name, savedId: pdf.id });
+        showPdf(await library.open(pdf.id), { name: pdf.name, savedId: pdf.id, fromLibrary: true });
       } catch {
         // library.error already holds the message for the panel
       }
@@ -119,7 +119,7 @@ export default function ReaderPage() {
   const handleDeleteSaved = useCallback(
     async (pdf) => {
       await library.remove(pdf.id);
-      // The file stays open, but it is no longer in the account.
+      // The file stays open, but it is no longer in the account (and isn't offered for saving again).
       setCurrentPdf((cur) => (cur?.savedId === pdf.id ? { ...cur, savedId: null } : cur));
     },
     [library.remove]
@@ -320,7 +320,8 @@ export default function ReaderPage() {
             error: library.error,
             notice: library.notice,
             busy: library.busy,
-            canSave: !!currentPdf && !openSavedId,
+            // A file opened from the library was deleted on purpose, so it isn't offered for saving again.
+            canSave: !!currentPdf && !openSavedId && !currentPdf.fromLibrary,
             activeId: openSavedId,
             onSave: handleSavePdf,
             onOpen: handleOpenSaved,
