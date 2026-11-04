@@ -45,10 +45,11 @@
         "run_worker_first": ["/api/*"]
       },
       "d1_databases": [
-        { "binding": "DB", "database_name": "sightread-production", "database_id": "REPLACE_WITH_PRODUCTION_DB_ID", "migrations_dir": "migrations" }
+        { "binding": "DB", "database_name": "sightread-production", "database_id": "979aee2c-54cb-4750-84b5-a4eb92667c54", "migrations_dir": "migrations" }
       ],
       "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-production" }],
-      "vars": { "GOOGLE_CLIENT_ID": "REPLACE_WITH_PRODUCTION_CLIENT_ID" }
+      "vars": { "GOOGLE_CLIENT_ID": "649384260817-j583ee2gotlp9j0m9v8tt3d7b994sg1h.apps.googleusercontent.com" },
+      "routes": [{ "pattern": "sightread.ing", "custom_domain": true }]
     }
   }
 }
