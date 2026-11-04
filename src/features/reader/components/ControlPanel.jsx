@@ -7,7 +7,7 @@ import OfflineBadge from "./OfflineBadge.jsx";
 import SectionToggle from "./SectionToggle.jsx";
 import { useSectionOpen } from "../hooks/useSectionOpen.js";
 import { eventToBinding, formatBinding, isScrollKey } from "../keybind.js";
-import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
+import { scrollZones } from "../../../config.js";
 import {
   isProfileCalibrated,
   isCalibrationStale,
@@ -97,12 +97,15 @@ export default function ControlPanel({
   // Debug
   debugRawY,
   debugCalibratedY,
+  debugEye,
+  debugHead,
   // Mediapipe
   mediapipeReady,
   mediapipeError,
   cameraActive,
   landmarksRef,
   framingOk,
+  qualityLevel,
 }) {
   const fileInputRef = useRef(null);
   const [showFaceView, setShowFaceView] = useState(true);
@@ -296,7 +299,7 @@ export default function ControlPanel({
         {profileOpen && selectedProfile && isProfileCalibrated(selectedProfile) && (
           <div>
             <button
-              className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
+              className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
               onClick={onRecenter}
               disabled={!mediapipeReady || isCalibrating}
             >
@@ -329,7 +332,7 @@ export default function ControlPanel({
             </button>
             <div className="mt-1.5 flex items-center gap-2">
               <button
-                className="flex-1 bg-slate-700 hover:bg-slate-600 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
+                className="bg-slate-700 hover:bg-slate-600 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
                 onClick={() => {
                   setKeyError("");
                   setCapture(!capturing);
@@ -343,7 +346,7 @@ export default function ControlPanel({
               </button>
               {trackingKey && !capturing && (
                 <button
-                  className="text-xs text-slate-500 hover:text-slate-300 underline"
+                  className="text-[10px] text-slate-500 hover:text-slate-300 underline"
                   onClick={() => onSetTrackingKey(null)}
                 >
                   Clear
@@ -351,19 +354,18 @@ export default function ControlPanel({
               )}
             </div>
             {keyError && <p className="text-xs text-red-400 mt-1">{keyError}</p>}
-            {!trackingReady && (!mediapipeReady || !isProfileCalibrated(selectedProfile)) && (
-              <p className="text-xs text-slate-500 mt-1.5">
-                {!mediapipeReady
-                  ? "Waiting for model…"
-                  : !selectedProfile
-                  ? "Select a profile first."
-                  : isCalibrationStale(selectedProfile)
-                  ? "Recalibrate the profile first."
-                  : !isProfileCalibrated(selectedProfile)
-                  ? "Calibrate the profile first."
-                  : ""}
-              </p>
-            )}
+            {/* A stale calibration is explained by the amber note below, so no hint here. */}
+            {!trackingReady &&
+              (!mediapipeReady || !isProfileCalibrated(selectedProfile)) &&
+              !(selectedProfile && isCalibrationStale(selectedProfile)) && (
+                <p className="text-xs text-slate-500 mt-1.5">
+                  {!mediapipeReady
+                    ? "Waiting for model…"
+                    : !selectedProfile
+                    ? "Select a profile first."
+                    : "Calibrate the profile first."}
+                </p>
+              )}
           </div>
         )}
         {selectedProfile && isCalibrationStale(selectedProfile) && (
@@ -463,6 +465,7 @@ export default function ControlPanel({
               landmarksRef={landmarksRef}
               active={cameraActive}
               framingOk={framingOk}
+              level={qualityLevel}
             />
             <p className="text-[11px] text-slate-500">
               Keep your face inside the guide.
@@ -495,9 +498,9 @@ export default function ControlPanel({
             const zone =
               debugCalibratedY === null
                 ? null
-                : debugCalibratedY < SCROLL_UP_THRESHOLD
+                : debugCalibratedY < scrollZones(zoom).up
                 ? "▲ up"
-                : debugCalibratedY > SCROLL_DOWN_THRESHOLD
+                : debugCalibratedY > scrollZones(zoom).down
                 ? "▼ down"
                 : "• neutral";
             const color =
@@ -513,6 +516,19 @@ export default function ControlPanel({
               </div>
             );
           })()}
+          {/* The two parts of rawY, to tell an eye-signal problem from a head-pitch one */}
+          <div>
+            <div className="text-slate-500">eye</div>
+            <div className="text-slate-200 tabular-nums">
+              {debugEye != null ? debugEye.toFixed(3) : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-slate-500">head</div>
+            <div className="text-slate-200 tabular-nums">
+              {debugHead != null ? debugHead.toFixed(3) : "—"}
+            </div>
+          </div>
         </div>}
       </section>
 

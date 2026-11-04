@@ -30,14 +30,22 @@
  *   combined value onto the screen.
  */
 
-// Relative weights of the two contributions. The eye term is small in magnitude
-// (~±0.1) while the head-pitch term is larger (~±0.5 of sin(pitch)), so the eye
-// term is given a higher gain to keep both meaningfully in play — a user can
-// scroll with their eyes alone or with a natural head tilt. Calibration
-// normalizes the sum, so only their RATIO (feel) and the signal-to-noise ratio
-// matter, not the absolute scale.
-const EYE_GAIN  = 4.0;
-const HEAD_GAIN = 2.0;
+import { assessQuality } from "./trackingQuality.js";
+
+// Relative weights of the two contributions. They are equal on purpose.
+//
+// The eye blendshapes measure the eyeballs RELATIVE TO THE HEAD, so tilting the
+// head up while still looking at the same spot rolls the eyes down inside the
+// head and raises eyeVertical. The head-pitch term moves the opposite way by the
+// same amount, so with equal gains the two cancel: gaze at a fixed spot stays put
+// however the head is tilted, and calibY only moves when the real line of sight
+// does. (Measured: head tilted up took eye 0.2 -> 0.7 and head 0.2 -> -0.3, equal
+// and opposite swings, which gives a 1:1 ratio.) Weighting the eyes well above the
+// head left that compensation uncancelled, so tilting the head up pushed the
+// reading toward "looking down". Calibration normalizes the sum, so only the
+// RATIO matters, not the absolute scale.
+const EYE_GAIN  = 3.0;
+const HEAD_GAIN = 3.0;
 
 // Blink/closed-eye cutoff: eyeBlink coefficients approach 1 when the lid closes.
 // Above this the eye gaze reading is unreliable, so we drop confidence to 0 and
@@ -48,13 +56,13 @@ const BLINK_THRESHOLD = 0.5;
 // The blendshapes only track accurately when the whole face is comfortably
 // inside the frame at a reasonable distance. Outside these bounds we pause and
 // tell the user how to reposition instead of scrolling on a bad reading.
-const FRAME_EDGE_MARGIN = 0.03; // landmarks this close to an edge = cut off
+const FRAME_EDGE_MARGIN = 0.02; // landmarks this close to an edge = cut off
 const MIN_FACE_HEIGHT   = 0.22; // face shorter than this = too far away
 const MAX_FACE_HEIGHT   = 0.90; // face taller than this  = too close
-const CENTER_X_MIN = 0.30;
-const CENTER_X_MAX = 0.70;
-const CENTER_Y_MIN = 0.28;
-const CENTER_Y_MAX = 0.72;
+const CENTER_X_MIN = 0.20;
+const CENTER_X_MAX = 0.80;
+const CENTER_Y_MIN = 0.20;
+const CENTER_Y_MAX = 0.80;
 
 /**
  * Assess how well the face is framed for tracking.
@@ -136,20 +144,23 @@ function headPitchDown(lm) {
 export function estimateGaze(result) {
   const lm = result?.faceLandmarks?.[0];
   if (!lm?.length) {
-    return { rawY: 0.5, confidence: 0, hasFace: false, hint: "No face detected" };
+    return { rawY: 0.5, confidence: 0, hasFace: false, hint: "No face detected", quality: 0, qualityHint: null, features: null };
   }
 
   // Framing gate: if the face isn't well-positioned, pause and say how to fix
   // it rather than scrolling on an inaccurate reading.
   const framingHint = assessFraming(lm);
   if (framingHint) {
-    return { rawY: 0.5, confidence: 0, hasFace: true, hint: framingHint };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: framingHint, quality: 0, qualityHint: framingHint, features: assessQuality(lm).features };
   }
+
+  // How good the face position is for tracking (drives the green→red aura).
+  const { score: quality, hint: qualityHint, features } = assessQuality(lm);
 
   const categories = result?.faceBlendshapes?.[0]?.categories;
   if (!categories?.length) {
     // Face detected but blendshapes unavailable — can't estimate gaze.
-    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null, quality, qualityHint, features };
   }
 
   // Build a name→score lookup once; blendshape order isn't guaranteed.
@@ -161,7 +172,7 @@ export function estimateGaze(result) {
   // normal, transient state, so no hint — just pause.
   const blink = Math.max(get("eyeBlinkLeft"), get("eyeBlinkRight"));
   if (blink > BLINK_THRESHOLD) {
-    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null, quality, qualityHint, features };
   }
 
   const lookUp   = (get("eyeLookUpLeft")   + get("eyeLookUpRight"))   / 2;
@@ -188,7 +199,7 @@ export function estimateGaze(result) {
     2;
 
   if (!isFinite(rawY) || isNaN(rawY)) {
-    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null };
+    return { rawY: 0.5, confidence: 0, hasFace: true, hint: null, quality, qualityHint, features };
   }
 
   return {
@@ -199,6 +210,9 @@ export function estimateGaze(result) {
     confidence: 1,
     hasFace: true,
     hint: null,
+    quality,
+    qualityHint,
+    features,
     sideGaze,
     // Surfaced for the calibration readout so the eye vs. head contributions
     // are visible (and verifiable) while tuning.

@@ -24,4 +24,10 @@ export function trimmed(values, fraction = 0.2) {
   return cut > 0 && sorted.length - 2 * cut > 0 ? sorted.slice(cut, sorted.length - cut) : sorted;
 }
 
+/** Mean of what's left after dropping the lowest and highest `fraction` of values. */
+export function trimmedMean(values, fraction = 0.2) {
+  const kept = trimmed(values, fraction);
+  return kept.reduce((a, b) => a + b, 0) / kept.length;
+}
+
 export const trimmedMedian = (values, fraction = 0.2) => median(trimmed(values, fraction));

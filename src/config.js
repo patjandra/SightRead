@@ -12,8 +12,10 @@
 //   v2 — MediaPipe eye blendshapes
 //   v3 — blendshapes with higher amplification
 //   v4 — eye blendshapes blended with head pitch
-//   v5 — same blend, unclamped raw signal + rebalanced gains (current)
-export const CALIBRATION_VERSION = 5;
+//   v5 — same blend, unclamped raw signal + rebalanced gains
+//   v6 — eyes weighted well above head pitch
+//   v7 — eye and head weighted equally, so head tilt with a fixed gaze cancels (current)
+export const CALIBRATION_VERSION = 7;
 
 // Gaze-zone thresholds on the calibrated [0,1] value. Shared by the scroll
 // controller (which acts on them) and the debug readout (which displays them).
@@ -22,6 +24,25 @@ export const CALIBRATION_VERSION = 5;
 // threshold) to make scrolling up as easy to trigger as scrolling down.
 export const SCROLL_UP_THRESHOLD = 0.47;   // calibratedY below this → scroll up
 export const SCROLL_DOWN_THRESHOLD = 0.62; // calibratedY above this → scroll down
+
+/**
+ * Scroll zones for a given page zoom. The dead zone around the reading band is
+ * widened as the page is zoomed in (the music is bigger, so reading one staff
+ * moves your gaze further). It is never narrower than the base thresholds: a
+ * narrower band would put a resting gaze (calibrated 0.5) inside the scroll-up
+ * zone, which made the page drift upward when zoomed out. Its center stays where
+ * the thresholds above put it, and at zoom 1 or less it matches them exactly.
+ * The half-width is capped so the dead zone never swallows most of the screen.
+ *
+ * @param {number} [zoom] - page zoom factor (1 = 100%)
+ * @returns {{ up: number, down: number }}
+ */
+export function scrollZones(zoom = 1) {
+  const center = (SCROLL_UP_THRESHOLD + SCROLL_DOWN_THRESHOLD) / 2;
+  const half = (SCROLL_DOWN_THRESHOLD - SCROLL_UP_THRESHOLD) / 2;
+  const scaled = Math.min(0.2, Math.max(half, half * zoom));
+  return { up: center - scaled, down: center + scaled };
+}
 
 // One Euro filter on the calibrated gaze position (see gaze/oneEuroFilter.js).
 // Lower MIN_CUTOFF = steadier at rest but laggier; higher BETA = quicker catch-up

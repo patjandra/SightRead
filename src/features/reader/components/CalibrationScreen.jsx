@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { diagnoseCalibration, isUsableSample } from "../gaze/calibrationManager.js";
-import { trimmed, trimmedMedian, stddev } from "../gaze/stats.js";
+import { trimmed, trimmedMean, stddev } from "../gaze/stats.js";
 
 const STEPS = [
   { key: "top",    label: "top",    dotTop: "13%" },
@@ -10,11 +10,11 @@ const STEPS = [
 
 // Collection ends once this many settled, on-target frames are in, so the ring
 // fills with good data rather than with time — look away and it stalls.
-const TARGET_SAMPLES = 36;
+const TARGET_SAMPLES = 90;
 // Give up on a step after this long if it never reached TARGET_SAMPLES.
-const MAX_COLLECT_MS = 4500;
+const MAX_COLLECT_MS = 8000;
 // A step that timed out is still accepted with at least this many usable frames.
-const MIN_SAMPLES = 15;
+const MIN_SAMPLES = 30;
 const COUNTDOWN_FIRST = 3; // the first dot gets a full countdown
 const COUNTDOWN_NEXT = 1;  // later dots just need a beat
 const COUNTDOWN_MS = 800;
@@ -144,9 +144,10 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
       return;
     }
 
-    // The trimmed median shrugs off stray frames at either end; the spread of
-    // the same trimmed set is the noise floor the final span is judged against.
-    const value = trimmedMedian(samples);
+    // The trimmed mean averages the whole viewing of the dot after dropping stray
+    // frames at either end; the spread of the same trimmed set is the noise floor
+    // the final span is judged against.
+    const value = trimmedMean(samples);
     noiseRef.current[step.key] = stddev(trimmed(samples));
 
     const newPoints = { ...points, [step.key]: value };

@@ -10,6 +10,9 @@ import CalibrationCheck from "./components/CalibrationCheck.jsx";
 import RecenterScreen from "./components/RecenterScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
 import TrackingWarning from "./components/TrackingWarning.jsx";
+import TrackingAura from "./components/TrackingAura.jsx";
+import { useSmoothedQuality } from "./hooks/useSmoothedQuality.js";
+import { scrollScaleForQuality } from "./gaze/trackingQuality.js";
 import TrackingPausedNotice from "./components/TrackingPausedNotice.jsx";
 import { useManualScrollPause } from "./hooks/useManualScrollPause.js";
 import { useTrackingKeybind } from "./hooks/useTrackingKeybind.js";
@@ -187,6 +190,11 @@ export default function ReaderPage() {
     setIsCalibrating(true);
   }, [selectedProfile]);
 
+  // Green zone for the tracking aura, learned in the "Try it" step after the
+  // three dots. Held in memory only, so it resets on reload; null means the
+  // default zone.
+  const [sweetSpot, setSweetSpot] = useState(null);
+
   // Points just captured, shown in a "try it" check before they are saved.
   const [pendingPoints, setPendingPoints] = useState(null);
 
@@ -235,7 +243,9 @@ export default function ReaderPage() {
     setIsCalibrating(false);
   }, []);
 
-  const handleCheckAccept = useCallback(() => {
+  // Accepting saves the calibration and the green zone learned alongside it.
+  const handleCheckAccept = useCallback((spot) => {
+    setSweetSpot(spot);
     updateSelectedProfile(pendingPoints);
     setRecenterOffset(0);
     setPendingPoints(null);
@@ -254,11 +264,18 @@ export default function ReaderPage() {
   // ── Scroll container ───────────────────────────────────────────────────────
   const scrollContainerRef = useRef(null);
 
+  // ── Tracking quality aura ────────────────────────────────────────────────
+  // Green → red as the face leaves the camera's sweet spot. Shown on the face
+  // preview whenever the camera is on, and around the window while tracking.
+  const smoothedQuality = useSmoothedQuality(gazeData, cameraShouldBeOn, sweetSpot);
+
   useScrollControl({
     gazeData,
     selectedProfile,
     isTracking,
     offset: recenterOffset,
+    zoom,
+    speedScale: scrollScaleForQuality(smoothedQuality?.score),
     sensitivity,
     confidenceThreshold: CONFIDENCE_THRESHOLD,
     scrollContainerRef,
@@ -375,6 +392,7 @@ export default function ReaderPage() {
       />
 
       <TrackingWarning show={showWarning} message={warningMessage} />
+      <TrackingAura level={isTracking ? smoothedQuality?.level : null} />
       <TrackingPausedNotice show={!!notice && !showWarning} message={notice?.message} kind={notice?.kind} />
 
       {uploadOffer && user && (
@@ -463,11 +481,14 @@ export default function ReaderPage() {
           zoom={zoom}
           debugRawY={debugRawY}
           debugCalibratedY={debugCalibratedY}
+          debugEye={confidentGaze ? gazeData.eyeVertical : null}
+          debugHead={confidentGaze ? gazeData.headVertical : null}
           mediapipeReady={mediapipeReady}
           mediapipeError={mediapipeError}
           cameraActive={cameraShouldBeOn}
           landmarksRef={landmarksRef}
           framingOk={framingOk}
+          qualityLevel={smoothedQuality?.level ?? null}
         />
 
         <PDFViewer

@@ -11,6 +11,8 @@ import { mapRawToCalibratedY } from "../gaze/calibrationManager.js";
  * @param {{ rawY: number, confidence: number, hasFace: boolean }} params.gazeData
  * @param {object|null} params.selectedProfile
  * @param {boolean} params.isTracking   - user has enabled tracking
+ * @param {number}  [params.speedScale] - 0–1 multiplier on scroll speed (tracking quality)
+ * @param {number}  [params.zoom]       - page zoom; scales zones and speed
  * @param {number}  [params.offset]     - recenter shift applied to raw gaze
  * @param {number}  params.sensitivity  - 0.25–2.0
  * @param {number}  params.confidenceThreshold
@@ -22,6 +24,8 @@ export function useScrollControl({
   selectedProfile,
   isTracking,
   offset = 0,
+  zoom = 1,
+  speedScale = 1,
   sensitivity,
   confidenceThreshold,
   scrollContainerRef,
@@ -40,6 +44,8 @@ export function useScrollControl({
     selectedProfile,
     isTracking,
     offset,
+    zoom,
+    speedScale,
     sensitivity,
     confidenceThreshold,
   };
@@ -51,6 +57,8 @@ export function useScrollControl({
         selectedProfile: profile,
         isTracking: tracking,
         offset: shift,
+        zoom: pageZoom,
+        speedScale: scale,
         sensitivity: sens,
         confidenceThreshold: threshold,
       } = stateRef.current;
@@ -85,7 +93,9 @@ export function useScrollControl({
         lastTickRef.current !== null ? (now - lastTickRef.current) / 1000 : 0;
       lastTickRef.current = now;
 
-      const delta = controllerRef.current.update(calibratedY, deltaTimeSec, sens);
+      // Poor tracking quality slows the scroll, and stops it once it is orange or red.
+      const delta =
+        controllerRef.current.update(calibratedY, deltaTimeSec, sens, pageZoom) * scale;
 
       // Accumulate fractional pixels; apply only the whole-pixel part so the
       // remainder isn't lost to scrollTop rounding between frames.
