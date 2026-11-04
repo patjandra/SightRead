@@ -1,0 +1,45 @@
+{
+  "name": "sightread",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c cyan,magenta \"vite\" \"wrangler dev --port 8787\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:web": "vite",
+    "dev:api": "wrangler dev --port 8787",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:staging": "wrangler d1 migrations apply DB --env staging --remote",
+    "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
+    "deploy:staging": "npm run build && wrangler deploy --env staging",
+    "deploy:production": "npm run build && wrangler deploy --env production",
+    "deploy:dry-run": "npm run build && wrangler deploy --env staging --dry-run"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.14",
+    "hono": "^4.13.16",
+    "jose": "^6.2.15",
+    "pdfjs-dist": "4.8.69",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-pdf": "^9.1.0",
+    "react-router-dom": "^7.18.5"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^10.0.6",
+    "fake-indexeddb": "^6.2.7",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.156.1"
+  }
+}

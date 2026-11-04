@@ -1,0 +1,55 @@
+{
+  // Top level = local development (`wrangler dev`). Staging and production are
+  // separate Workers with their own D1 databases; bindings and vars are not
+  // inherited by `env` blocks, so each environment repeats them.
+  "name": "sightread",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+
+  // Static app. Only /api/* runs the Worker first; every other path is served
+  // from dist/ with SPA fallback so client-side routes (/signin, ...) work.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "d1_databases": [
+    { "binding": "DB", "database_name": "sightread-local", "database_id": "local", "migrations_dir": "migrations" }
+  ],
+  // PDF library. Locally wrangler simulates the bucket; it is only ever read
+  // through the Worker (never public).
+  "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-local" }],
+  // Public value. Replace with your Google OAuth web client ID (also in .dev.vars for local dev).
+  "vars": { "GOOGLE_CLIENT_ID": "649384260817-bb1kj82kblqg9ldrd8njk1klli2c7j1t.apps.googleusercontent.com" },
+
+  "env": {
+    "staging": {
+      "name": "sightread-staging",
+      "assets": {
+        "directory": "./dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "sightread-staging", "database_id": "3367c1c7-f6c4-459b-b9c4-c92f99fd4a9a", "migrations_dir": "migrations" }
+      ],
+      "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-staging" }],
+      "vars": { "GOOGLE_CLIENT_ID": "649384260817-97hc0jhbdh2fut25n05ccbgdgvijavnd.apps.googleusercontent.com" }
+    },
+    "production": {
+      "name": "sightread-production",
+      "assets": {
+        "directory": "./dist",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "sightread-production", "database_id": "979aee2c-54cb-4750-84b5-a4eb92667c54", "migrations_dir": "migrations" }
+      ],
+      "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-production" }],
+      "vars": { "GOOGLE_CLIENT_ID": "649384260817-j583ee2gotlp9j0m9v8tt3d7b994sg1h.apps.googleusercontent.com" },
+      "routes": [{ "pattern": "sightread.ing", "custom_domain": true }]
+    }
+  }
+}

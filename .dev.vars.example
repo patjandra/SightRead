@@ -1,0 +1,8 @@
+# Copy to .dev.vars (gitignored) for `wrangler dev`.
+# Generate a secret with: openssl rand -base64 32
+SESSION_SECRET=replace-with-at-least-32-random-chars
+GOOGLE_CLIENT_ID=REPLACE_WITH_DEV_CLIENT_ID
+ALLOWED_ORIGINS=http://localhost:5173
+
+# Safari refuses Secure cookies on http://localhost; only honored for localhost.
+INSECURE_DEV_COOKIES=true
