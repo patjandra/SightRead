@@ -234,6 +234,64 @@ describe("AuthProvider / requireAuth", () => {
   });
 });
 
+describe("openSwitchAccount", () => {
+  const OTHER = { id: "u2", email: "bob@example.com", name: "Bob", picture: null };
+
+  function SwitchHarness({ onSignOut }) {
+    const { user, status, openSwitchAccount } = useAuth();
+    useOnSignOut(onSignOut);
+    return (
+      <>
+        <p data-testid="u">{user?.email ?? "none"}</p>
+        <p data-testid="s">{status}</p>
+        <button onClick={openSwitchAccount}>switch</button>
+      </>
+    );
+  }
+
+  async function open(onSignOut = vi.fn()) {
+    client.getMe.mockResolvedValue({ user: USER });
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <SwitchHarness onSignOut={onSignOut} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId("u")).toHaveTextContent("ada@example.com"));
+    fireEvent.click(screen.getByText("switch"));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Switch account");
+    return onSignOut;
+  }
+
+  it("stays signed in when the prompt is dismissed", async () => {
+    const onSignOut = await open();
+    fireEvent.click(screen.getByText("Not now"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("u")).toHaveTextContent("ada@example.com");
+    expect(client.signOut).not.toHaveBeenCalled();
+    expect(onSignOut).not.toHaveBeenCalled();
+  });
+
+  it("signs the old account out, then in as the new one, when a different account is chosen", async () => {
+    client.signInWithGoogle.mockResolvedValue({ user: OTHER });
+    const onSignOut = await open();
+    fireEvent.click(screen.getByText("google"));
+    await waitFor(() => expect(screen.getByTestId("u")).toHaveTextContent("bob@example.com"));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("s")).toHaveTextContent("signed-in");
+  });
+
+  it("does not sign out when the same account is chosen again", async () => {
+    client.signInWithGoogle.mockResolvedValue({ user: USER });
+    const onSignOut = await open();
+    fireEvent.click(screen.getByText("google"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByTestId("u")).toHaveTextContent("ada@example.com");
+    expect(onSignOut).not.toHaveBeenCalled();
+  });
+});
+
 describe("deleteAccount", () => {
   function DeleteHarness({ onError }) {
     const { status, deleteAccount } = useAuth();

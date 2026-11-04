@@ -21,7 +21,7 @@ function GuestAvatar() {
 
 /** Account controls for the side panel: sign in (guest) or identity + sign out. */
 export default function AccountSection() {
-  const { status, user, signOut, deleteAccount, openSignIn } = useAuth();
+  const { status, user, signOut, deleteAccount, openSignIn, openSwitchAccount } = useAuth();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
   const [signOutError, setSignOutError] = useState(null);
@@ -70,10 +70,19 @@ export default function AccountSection() {
             </button>
             {" · "}
             <button
+              onClick={openSwitchAccount}
+              aria-label="Switch account"
+              className="text-[11px] text-slate-400 hover:text-white underline underline-offset-2"
+            >
+              Switch
+            </button>
+            {" · "}
+            <button
               onClick={() => setConfirmingDelete(true)}
+              aria-label="Delete account"
               className="text-[11px] text-slate-500 hover:text-red-400 underline underline-offset-2"
             >
-              Delete account
+              Delete
             </button>
             {signOutError && <p className="text-[11px] text-red-400">{signOutError}</p>}
           </div>
@@ -109,7 +118,7 @@ export default function AccountSection() {
           </div>
         </div>
       )}
-      <p className="text-[11px] text-slate-500">
+      <p className="text-[11px] text-slate-500 text-center">
         <Link to="/privacy" className="hover:text-slate-300 underline">Privacy</Link>
         {" · "}
         <Link to="/terms" className="hover:text-slate-300 underline">Terms</Link>

@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { getMe, signInWithGoogle, signOut as apiSignOut, deleteAccount as apiDeleteAccount } from "./authClient.js";
 import SignInPrompt from "./SignInPrompt.jsx";
 
@@ -25,6 +26,8 @@ export default function AuthProvider({ children }) {
   // null = closed; "save" = a guest tried to save; "signin" = they chose Sign in.
   const [promptMode, setPromptMode] = useState(null);
   const pendingRef = useRef(null);
+  const userRef = useRef(null);
+  userRef.current = user;
 
   /** (Re)check the session with the server. */
   const refresh = useCallback(async () => {
@@ -48,6 +51,15 @@ export default function AuthProvider({ children }) {
   /** Exchange a Google credential for a session. Throws on failure. */
   const completeSignIn = useCallback(async (credential) => {
     const { user } = await signInWithGoogle(credential);
+    // Picking a different account is a sign-out of the old one first, so its
+    // profiles, cached PDFs and open document are dropped like on Sign out.
+    // Picking the same account just refreshes it.
+    if (userRef.current && userRef.current.id !== user.id) {
+      flushSync(() => {
+        setUser(null);
+        setStatus("guest");
+      });
+    }
     setUser(user);
     setSessionUnknown(false);
     setStatus("signed-in");
@@ -96,6 +108,13 @@ export default function AuthProvider({ children }) {
     setPromptMode("signin");
   }, []);
 
+  // Ask Google for an account while staying signed in; nothing changes unless
+  // a different account is chosen.
+  const openSwitchAccount = useCallback(() => {
+    pendingRef.current = null;
+    setPromptMode("switch");
+  }, []);
+
   const closePrompt = useCallback(() => {
     pendingRef.current = null;
     setPromptMode(null);
@@ -111,6 +130,7 @@ export default function AuthProvider({ children }) {
     deleteAccount,
     requireAuth,
     openSignIn,
+    openSwitchAccount,
   };
 
   return (

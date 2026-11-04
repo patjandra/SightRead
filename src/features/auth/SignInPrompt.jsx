@@ -36,11 +36,13 @@ export default function SignInPrompt({ mode = "save", onClose }) {
       >
         <div className="space-y-1">
           <h2 id="signin-prompt-title" className="text-lg font-semibold">
-            {mode === "save" ? "Sign in to save" : "Sign in to SightRead"}
+            {mode === "save" ? "Sign in to save" : mode === "switch" ? "Switch account" : "Sign in to SightRead"}
           </h2>
           <p className="text-sm text-slate-400">
             {mode === "save"
               ? "Saving keeps your profiles and sheet music with your account so you can use them on any device."
+              : mode === "switch"
+              ? "Choose the account to use. Close this to stay signed in as you are."
               : "Sign in to keep your profiles and sheet music with your account across devices."}
           </p>
         </div>
