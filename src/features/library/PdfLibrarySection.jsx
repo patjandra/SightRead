@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import SectionToggle from "../reader/components/SectionToggle.jsx";
+import { useSectionOpen } from "../reader/hooks/useSectionOpen.js";
 
 const MB = 1024 * 1024;
 // Past this many PDFs the list scrolls inside a fixed height and gains a search box.
@@ -28,7 +30,10 @@ export default function PdfLibrarySection({
   onDelete,
   activeId,
 }) {
+  const [open, toggleOpen] = useSectionOpen("library");
   const [query, setQuery] = useState("");
+  // Id of the row asking "Delete?"; a second click on Delete is what removes it.
+  const [confirmingId, setConfirmingId] = useState(null);
   const needle = query.trim().toLowerCase();
   const visible = needle ? pdfs.filter((p) => p.name.toLowerCase().includes(needle)) : pdfs;
   const many = pdfs.length > SCROLL_AFTER;
@@ -39,7 +44,7 @@ export default function PdfLibrarySection({
         <button
           onClick={onSave}
           disabled={busy}
-          className="w-full text-left bg-slate-700/60 hover:bg-slate-700 disabled:opacity-60 border border-slate-600 rounded-lg px-3 py-1.5 text-xs transition-colors"
+          className="w-full text-left bg-yellow-300/30 hover:bg-yellow-300/40 text-yellow-100 font-medium disabled:opacity-60 border border-yellow-300/50 rounded-lg px-3 py-1.5 text-xs transition-colors"
         >
           {busy ? "Saving…" : signedIn ? "Save to account" : "Sign in to save to account"}
         </button>
@@ -49,10 +54,10 @@ export default function PdfLibrarySection({
 
       {showList && (
         <>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 pt-1">
+          <SectionToggle open={open} onToggle={toggleOpen} className="pt-1">
             Your library
-          </p>
-          {pdfs.length === 0 ? (
+          </SectionToggle>
+          {!open ? null : pdfs.length === 0 ? (
             <p className="text-xs text-slate-500">No saved PDFs yet.</p>
           ) : (
             <>
@@ -88,26 +93,47 @@ export default function PdfLibrarySection({
                       {pdf.offline && " · Saved offline"}
                     </span>
                   </button>
-                  <button
-                    onClick={() => onDelete(pdf)}
-                    className="text-slate-500 hover:text-red-400 px-1"
-                    aria-label={`Delete ${pdf.name}`}
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
+                  {confirmingId === pdf.id ? (
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setConfirmingId(null);
+                          onDelete(pdf);
+                        }}
+                        className="text-red-400 hover:text-red-300 font-medium"
+                        aria-label={`Confirm delete ${pdf.name}`}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmingId(pdf.id)}
+                      className="text-slate-500 hover:text-red-400 px-1"
+                      aria-label={`Delete ${pdf.name}`}
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
             </>
           )}
-          {offlineCount > 0 && (
+          {open && offlineCount > 0 && (
             <p className="text-[10px] text-slate-500">
               Kept on this device: {offlineCount} {offlineCount === 1 ? "file" : "files"},{" "}
               {formatSize(offlineBytes)}
             </p>
           )}
-          {limitBytes > 0 && (
+          {open && limitBytes > 0 && (
             <div>
               <div className="h-1 rounded bg-slate-700 overflow-hidden">
                 <div

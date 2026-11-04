@@ -31,6 +31,8 @@ describe("PdfLibrarySection", () => {
     fireEvent.click(screen.getByTitle("Open Etude.pdf"));
     expect(onOpen).toHaveBeenCalledWith(base.pdfs[0]);
     fireEvent.click(screen.getByLabelText("Delete Etude.pdf"));
+    expect(onDelete).not.toHaveBeenCalled(); // first click only asks
+    fireEvent.click(screen.getByLabelText("Confirm delete Etude.pdf"));
     expect(onDelete).toHaveBeenCalledWith(base.pdfs[0]);
   });
 
@@ -114,5 +116,14 @@ describe("PdfLibrarySection", () => {
     rerender(<PdfLibrarySection {...base} notice="Heads up" error="Broke" />);
     expect(screen.queryByText("Heads up")).not.toBeInTheDocument();
     expect(screen.getByText("Broke")).toBeInTheDocument();
+  });
+
+  it("cancel backs out of a delete without removing anything", () => {
+    const onDelete = vi.fn();
+    render(<PdfLibrarySection {...base} onDelete={onDelete} />);
+    fireEvent.click(screen.getByLabelText("Delete Etude.pdf"));
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Delete Etude.pdf")).toBeInTheDocument();
   });
 });

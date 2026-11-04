@@ -14,6 +14,13 @@ body,
   padding: 0;
 }
 
+/* No rubber-band: scrolling past the top or bottom must not drag the page and
+   open a gap above the sidebar. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
@@ -23,6 +30,7 @@ body {
 
 /* Slim, unobtrusive scrollbars that match the dark UI */
 .sr-scroll {
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: #475569 transparent;
 }

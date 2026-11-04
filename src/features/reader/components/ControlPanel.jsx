@@ -4,6 +4,8 @@ import PdfLibrarySection from "../../library/PdfLibrarySection.jsx";
 import FacePreview from "./FacePreview.jsx";
 import AccountSection from "../../auth/AccountSection.jsx";
 import OfflineBadge from "./OfflineBadge.jsx";
+import SectionToggle from "./SectionToggle.jsx";
+import { useSectionOpen } from "../hooks/useSectionOpen.js";
 import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
 import {
   isProfileCalibrated,
@@ -97,6 +99,9 @@ export default function ControlPanel({
 }) {
   const fileInputRef = useRef(null);
   const [showFaceView, setShowFaceView] = useState(true);
+  const [profileOpen, toggleProfile] = useSectionOpen("profile");
+  const [faceOpen, toggleFace] = useSectionOpen("face");
+  const [gazeOpen, toggleGaze] = useSectionOpen("gaze");
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -163,30 +168,6 @@ export default function ControlPanel({
         </button>
       </div>
 
-      {/* PDF Upload */}
-      <section className="space-y-1.5">
-        <SectionLabel>Sheet music</SectionLabel>
-        <button
-          className="w-full flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
-            <path d="M12 3v12" />
-            <path d="m7 8 5-5 5 5" />
-            <path d="M5 21h14" />
-          </svg>
-          <span className="truncate">{hasPdf ? "Change PDF" : "Upload PDF"}</span>
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        {library && <PdfLibrarySection {...library} />}
-      </section>
-
       {/* Camera status */}
       <section className="flex items-center justify-between">
         <SectionLabel>Camera</SectionLabel>
@@ -215,72 +196,102 @@ export default function ControlPanel({
         <p className="-mt-2 text-xs text-red-400/90 leading-snug">{mediapipeError}</p>
       )}
 
+      {/* PDF Upload */}
+      <section className="space-y-1.5">
+        <SectionLabel>Sheet music</SectionLabel>
+        <button
+          className="w-full flex items-center gap-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400">
+            <path d="M12 3v12" />
+            <path d="m7 8 5-5 5 5" />
+            <path d="M5 21h14" />
+          </svg>
+          <span className="truncate">{hasPdf ? "Change PDF" : "Upload PDF"}</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        {library && <PdfLibrarySection {...library} />}
+      </section>
+
       {/* Profile selector */}
       <section className="space-y-1.5">
-        <SectionLabel>Profile</SectionLabel>
-        <OfflineBadge pendingCount={pendingCount} />
-        <ProfileSelector
-          profiles={profiles}
-          selectedId={selectedId}
-          onSelect={onSelectProfile}
-          onDelete={onDeleteProfile}
-          onCreate={onCreateProfile}
-          syncStatus={syncStatus}
-          onSaveToAccount={onSaveProfileToAccount}
-          onRetrySync={onRetrySync}
-        />
+        <SectionToggle open={profileOpen} onToggle={toggleProfile}>
+          Profile and Tracking
+        </SectionToggle>
+        {profileOpen && <OfflineBadge pendingCount={pendingCount} />}
+        {profileOpen && (
+          <ProfileSelector
+            profiles={profiles}
+            selectedId={selectedId}
+            onSelect={onSelectProfile}
+            onDelete={onDeleteProfile}
+            onCreate={onCreateProfile}
+            syncStatus={syncStatus}
+            onSaveToAccount={onSaveProfileToAccount}
+            onRetrySync={onRetrySync}
+          />
+        )}
+        {/* Calibration */}
+        {profileOpen && (
+          <div>
+            <button
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              onClick={onStartCalibration}
+              disabled={!mediapipeReady || isCalibrating || !selectedProfile}
+            >
+              {calibrateLabel}
+            </button>
+            {!selectedProfile && (
+              <p className="text-xs text-slate-500 mt-1.5">Select or create a profile first.</p>
+            )}
+          </div>
+        )}
+        {/* Tracking */}
+        {profileOpen && (
+          <div>
+            <button
+              className={`w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 focus:outline-none focus:ring-2 ${
+                isTracking
+                  ? "bg-red-600 hover:bg-red-500 focus:ring-red-500/50 disabled:hover:bg-red-600"
+                  : "bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500/50 disabled:hover:bg-emerald-600"
+              }`}
+              onClick={onToggleTracking}
+              disabled={!trackingReady}
+            >
+              {isTracking ? "Pause tracking" : "Start tracking"}
+            </button>
+            {!trackingReady && (
+              <p className="text-xs text-slate-500 mt-1.5">
+                {!mediapipeReady
+                  ? "Waiting for model…"
+                  : !selectedProfile
+                  ? "Select a profile first."
+                  : isCalibrationStale(selectedProfile)
+                  ? "Recalibrate the profile first."
+                  : !isProfileCalibrated(selectedProfile)
+                  ? "Calibrate the profile first."
+                  : !hasPdf
+                  ? "Upload a PDF first."
+                  : ""}
+              </p>
+            )}
+          </div>
+        )}
         {selectedProfile && isCalibrationStale(selectedProfile) && (
           <p className="text-xs text-amber-400">
-            Calibration out of date — recalibrate below.
+            Calibration out of date — recalibrate.
           </p>
         )}
         {selectedProfile && !selectedProfile.points && (
           <p className="text-xs text-amber-400">
             Not calibrated yet — click Calibrate.
-          </p>
-        )}
-      </section>
-
-      {/* Calibration */}
-      <section>
-        <button
-          className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          onClick={onStartCalibration}
-          disabled={!mediapipeReady || isCalibrating || !selectedProfile}
-        >
-          {calibrateLabel}
-        </button>
-        {!selectedProfile && (
-          <p className="text-xs text-slate-500 mt-1.5">Select or create a profile first.</p>
-        )}
-      </section>
-
-      {/* Tracking */}
-      <section>
-        <button
-          className={`w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 focus:outline-none focus:ring-2 ${
-            isTracking
-              ? "bg-red-600 hover:bg-red-500 focus:ring-red-500/50 disabled:hover:bg-red-600"
-              : "bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500/50 disabled:hover:bg-emerald-600"
-          }`}
-          onClick={onToggleTracking}
-          disabled={!trackingReady}
-        >
-          {isTracking ? "Pause tracking" : "Start tracking"}
-        </button>
-        {!trackingReady && (
-          <p className="text-xs text-slate-500 mt-1.5">
-            {!mediapipeReady
-              ? "Waiting for model…"
-              : !selectedProfile
-              ? "Select a profile first."
-              : isCalibrationStale(selectedProfile)
-              ? "Recalibrate the profile first."
-              : !isProfileCalibrated(selectedProfile)
-              ? "Calibrate the profile first."
-              : !hasPdf
-              ? "Upload a PDF first."
-              : ""}
           </p>
         )}
       </section>
@@ -339,7 +350,9 @@ export default function ControlPanel({
       {/* Face preview — shows what the camera sees and how you're framed */}
       <section className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <SectionLabel>Face view</SectionLabel>
+          <SectionToggle open={faceOpen} onToggle={toggleFace}>
+            Face view
+          </SectionToggle>
           <button
             onClick={() => setShowFaceView((v) => !v)}
             role="switch"
@@ -356,7 +369,7 @@ export default function ControlPanel({
             />
           </button>
         </div>
-        {showFaceView && (
+        {faceOpen && showFaceView && (
           <>
             <FacePreview
               landmarksRef={landmarksRef}
@@ -372,8 +385,10 @@ export default function ControlPanel({
 
       {/* Debug */}
       <section className="mt-auto border-t border-slate-700 pt-3">
-        <SectionLabel className="mb-1.5">Gaze data</SectionLabel>
-        <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+        <SectionToggle open={gazeOpen} onToggle={toggleGaze} className="mb-1.5">
+          Gaze data
+        </SectionToggle>
+        {gazeOpen && <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
           <div>
             <div className="text-slate-500">rawY</div>
             <div className="text-slate-200 tabular-nums">
@@ -410,7 +425,7 @@ export default function ControlPanel({
               </div>
             );
           })()}
-        </div>
+        </div>}
       </section>
 
       <AccountSection />
