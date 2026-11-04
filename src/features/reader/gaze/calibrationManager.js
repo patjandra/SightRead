@@ -41,9 +41,12 @@ export function isCalibrationStale(profile) {
  *
  * @param {number} rawY
  * @param {{ points: { top: number, center: number, bottom: number } }} profile
+ * @param {number} [offset] - session recenter shift, subtracted from rawY to
+ *   undo drift since calibration (never stored in the profile)
  * @returns {number|null}
  */
-export function mapRawToCalibratedY(rawY, profile) {
+export function mapRawToCalibratedY(rawY, profile, offset = 0) {
+  rawY -= offset;
   if (!profile || !profile.points) return null;
 
   const { top, center, bottom } = profile.points;
@@ -82,4 +85,91 @@ export function mapRawToCalibratedY(rawY, profile) {
   if (!isFinite(calibrated) || isNaN(calibrated)) return null;
 
   return Math.min(1, Math.max(0, calibrated));
+}
+
+// ─── Calibration capture ───────────────────────────────────────────────────────
+
+// Frames in the first stretch after the dot lights up are discarded: the eyes are
+// still travelling to it, and those readings would skew the step's value.
+export const SETTLE_MS = 400;
+// Reject frames where the eyes are clearly turned to the side. Looking up/down
+// at the (centered) dots can add some horizontal cross-talk, so keep this high
+// and only reject a strong sideways turn.
+export const SIDE_GAZE_MAX = 0.6;
+
+/**
+ * Whether a gaze frame should count toward the current calibration step: the
+ * eyes have had time to settle, the face is confidently tracked, and the eyes
+ * aren't turned to the side.
+ *
+ * @param {{ confidence: number, hasFace: boolean, sideGaze?: number }} gaze
+ * @param {number} elapsedMs - time since the step started collecting
+ * @returns {boolean}
+ */
+export function isUsableSample(gaze, elapsedMs) {
+  return (
+    elapsedMs >= SETTLE_MS &&
+    gaze.confidence >= 0.5 &&
+    gaze.hasFace &&
+    (gaze.sideGaze ?? 0) < SIDE_GAZE_MAX
+  );
+}
+
+// The top→bottom span must exceed this multiple of the measurement noise (the
+// largest per-step standard deviation). This is the core "did your gaze really
+// move" guard, expressed relative to jitter so it scales with the signal.
+const MIN_SNR = 3;
+// A tiny absolute floor on the top→bottom span, so a degenerate near-flat signal
+// with near-zero noise can't sneak past the SNR check.
+const MIN_TOTAL_SPAN = 0.03;
+// Adjacent points must land in order (top < center < bottom) with at least this
+// much gap, or a step was mis-captured and the mapping can't separate the zones.
+const MIN_SEPARATION = 0.01;
+
+/**
+ * Check a full set of captured points and, if they are unusable, say which single
+ * step to redo (when one is clearly to blame) or that everything should be redone.
+ *
+ * @param {{ top: number, center: number, bottom: number }} points
+ * @param {{ top?: number, center?: number, bottom?: number }} noise - per-step stddev
+ * @returns {{ ok: true } | { ok: false, badStep: "top"|"center"|"bottom"|null, reason: string }}
+ */
+export function diagnoseCalibration(points, noise = {}) {
+  const { top, center, bottom } = points;
+  const readings = `(top ${top.toFixed(2)}, center ${center.toFixed(2)}, bottom ${bottom.toFixed(2)})`;
+
+  const topBad = top + MIN_SEPARATION > center;
+  const bottomBad = center + MIN_SEPARATION > bottom;
+
+  if (topBad || bottomBad) {
+    // Both gaps wrong: the order is reversed or flat, so no one step is to blame.
+    let badStep = null;
+    if (topBad && !bottomBad) badStep = noisier(noise, "top", "center");
+    else if (bottomBad && !topBad) badStep = noisier(noise, "center", "bottom");
+    return {
+      ok: false,
+      badStep,
+      reason: `Those readings didn't line up ${readings}. Look straight at each dot in turn.`,
+    };
+  }
+
+  const maxNoise = Math.max(noise.top ?? 0, noise.center ?? 0, noise.bottom ?? 0, 1e-4);
+  const span = bottom - top;
+  if (span < MIN_SNR * maxNoise || span < MIN_TOTAL_SPAN) {
+    return {
+      ok: false,
+      badStep: null,
+      reason: `Your gaze barely moved ${readings}. Really look up at the top dot and down at the bottom dot — moving your head is fine.`,
+    };
+  }
+  return { ok: true };
+}
+
+// Of two neighbouring steps that disagree, blame the one that was noisier;
+// on a tie, blame the middle one (every neighbouring pair includes it).
+function noisier(noise, a, b) {
+  const na = noise[a] ?? 0;
+  const nb = noise[b] ?? 0;
+  if (na === nb) return "center";
+  return na > nb ? a : b;
 }

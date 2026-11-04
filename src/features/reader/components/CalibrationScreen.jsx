@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { diagnoseCalibration, isUsableSample } from "../gaze/calibrationManager.js";
+import { trimmed, trimmedMean, stddev } from "../gaze/stats.js";
 
 const STEPS = [
   { key: "top",    label: "top",    dotTop: "13%" },
@@ -6,48 +8,16 @@ const STEPS = [
   { key: "bottom", label: "bottom", dotTop: "83%" },
 ];
 
-const COLLECT_MS   = 1500;
-const COUNTDOWN_N  = 3;
+// Collection ends once this many settled, on-target frames are in, so the ring
+// fills with good data rather than with time — look away and it stalls.
+const TARGET_SAMPLES = 90;
+// Give up on a step after this long if it never reached TARGET_SAMPLES.
+const MAX_COLLECT_MS = 8000;
+// A step that timed out is still accepted with at least this many usable frames.
+const MIN_SAMPLES = 30;
+const COUNTDOWN_FIRST = 3; // the first dot gets a full countdown
+const COUNTDOWN_NEXT = 1;  // later dots just need a beat
 const COUNTDOWN_MS = 800;
-
-// ─── Robustness thresholds ───────────────────────────────────────────────────
-// The validation is signal-to-noise based rather than fixed-magnitude: it asks
-// "did the gaze move clearly more than it jitters?" instead of "did it move at
-// least X." That adapts to whatever scale the blended signal actually has, so a
-// real calibration isn't rejected just because the raw numbers are small.
-//
-// Minimum on-target samples needed to trust a step. Frames are only counted
-// when the face is detected and confident; too few means it wasn't seen enough.
-const MIN_SAMPLES = 6;
-// Reject frames where the eyes are clearly turned to the side. Looking up/down
-// at the (centered) dots can add some horizontal cross-talk, so keep this high
-// and only reject a strong sideways turn.
-const SIDE_GAZE_MAX = 0.6;
-// The top→bottom span must exceed this multiple of the measurement noise (the
-// largest per-step standard deviation). This is the core "did your gaze really
-// move" guard, expressed relative to jitter so it scales with the signal.
-const MIN_SNR = 3;
-// A tiny absolute floor on the top→bottom span, so a degenerate near-flat signal
-// with near-zero noise can't sneak past the SNR check.
-const MIN_TOTAL_SPAN = 0.03;
-// Adjacent points must land in order (top < center < bottom) with at least this
-// much gap, or a step was mis-captured and the mapping can't separate the zones.
-const MIN_SEPARATION = 0.01;
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
-}
-
-function stddev(values) {
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const variance =
-    values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
-}
 
 // Ring geometry — container is 80×80px, SVG viewBox 0 0 80 80
 const RING_CX = 40;
@@ -58,7 +28,7 @@ const RING_C  = 2 * Math.PI * RING_R; // ≈ 207.3
 export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [phase,     setPhase]     = useState("countdown");
-  const [countdown, setCountdown] = useState(COUNTDOWN_N);
+  const [countdown, setCountdown] = useState(COUNTDOWN_FIRST);
   const [progress,  setProgress]  = useState(0);
   const [points,    setPoints]    = useState({});
   const [failReason, setFailReason] = useState("");
@@ -73,6 +43,10 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
   const framingHintRef  = useRef(null);
   // Per-step sample spread (stddev), keyed by step, for the final SNR check.
   const noiseRef        = useRef({});
+  // Index of the single step being redone after a failed check, or null on a
+  // normal run. A redone step goes straight to the final check, keeping the
+  // other steps' points.
+  const redoRef         = useRef(null);
 
   const step = STEPS[stepIndex];
 
@@ -89,11 +63,11 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
   function startStep() {
     clearTimers();
     setPhase("countdown");
-    setCountdown(COUNTDOWN_N);
     setProgress(0);
     samplesRef.current = [];
 
-    let count = COUNTDOWN_N;
+    let count = stepIndex === 0 && redoRef.current === null ? COUNTDOWN_FIRST : COUNTDOWN_NEXT;
+    setCountdown(count);
     timerRef.current = setInterval(() => {
       count -= 1;
       if (count <= 0) {
@@ -119,9 +93,9 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
 
     function frame() {
       const elapsed = performance.now() - collectStartRef.current;
-      const prog = Math.min(1, elapsed / COLLECT_MS);
+      const prog = Math.min(1, samplesRef.current.length / TARGET_SAMPLES);
       setProgress(prog);
-      if (prog < 1) {
+      if (prog < 1 && elapsed < MAX_COLLECT_MS) {
         rafRef.current = requestAnimationFrame(frame);
       } else {
         finishStep();
@@ -130,8 +104,8 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
     rafRef.current = requestAnimationFrame(frame);
   }
 
-  // Collect a sample only when the face is confidently tracked AND the eyes are
-  // looking roughly straight at the dot (not off to the side).
+  // Collect a sample only once the eyes have settled on the dot, the face is
+  // confidently tracked, and the eyes aren't turned to the side.
   useEffect(() => {
     if (phase !== "collecting") return;
 
@@ -142,15 +116,14 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
         gazeData.hint || "Keep your whole face in the camera view.";
     }
 
-    const onTarget =
-      gazeData.confidence >= 0.5 &&
-      gazeData.hasFace &&
-      (gazeData.sideGaze ?? 0) < SIDE_GAZE_MAX;
-    if (onTarget) {
+    const elapsed = performance.now() - collectStartRef.current;
+    if (isUsableSample(gazeData, elapsed) && samplesRef.current.length < TARGET_SAMPLES) {
       samplesRef.current.push(gazeData.rawY);
     }
   }, [gazeData, phase]);
 
+  // mode: "step" retries the current step, "all" restarts, or a step key
+  // ("top" | "center" | "bottom") redoes that one step.
   function failStep(reason, mode = "step") {
     failModeRef.current = mode;
     setFailReason(reason);
@@ -171,59 +144,42 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
       return;
     }
 
-    // Median is robust to the occasional stray frame; the spread is the noise
-    // floor the final span is later judged against.
-    const value = median(samples);
-    noiseRef.current[step.key] = stddev(samples);
+    // The trimmed mean averages the whole viewing of the dot after dropping stray
+    // frames at either end; the spread of the same trimmed set is the noise floor
+    // the final span is judged against.
+    const value = trimmedMean(samples);
+    noiseRef.current[step.key] = stddev(trimmed(samples));
 
     const newPoints = { ...points, [step.key]: value };
     setPoints(newPoints);
 
-    if (stepIndex < STEPS.length - 1) {
+    // A normal run moves on to the next dot; a redone step skips straight to
+    // the final check, since the other points are already captured.
+    if (redoRef.current === null && stepIndex < STEPS.length - 1) {
       setPhase("done");
       setTimeout(() => setStepIndex((i) => i + 1), 350);
       return;
     }
 
-    // Final consistency check across all three points:
-    //  1. They must increase in order (top < center < bottom) with separation —
-    //     otherwise a step was mis-captured (e.g. looked the wrong way).
-    //  2. The top→bottom span must clearly beat the jitter (SNR) AND clear a
-    //     tiny absolute floor — otherwise the gaze never really travelled
-    //     between the dots and the mapping would amplify noise into wild scroll.
-    // Either failure means redo the whole calibration.
-    const { top, center, bottom } = newPoints;
-    const span = bottom - top;
-    const noise = Math.max(
-      noiseRef.current.top ?? 0,
-      noiseRef.current.center ?? 0,
-      noiseRef.current.bottom ?? 0,
-      1e-4 // avoid divide-by-zero / infinite SNR on a perfectly flat capture
-    );
-
-    const ordered =
-      top + MIN_SEPARATION <= center && center + MIN_SEPARATION <= bottom;
-    const enoughSignal = span >= MIN_SNR * noise && span >= MIN_TOTAL_SPAN;
-    if (!ordered || !enoughSignal) {
-      const readings = `(top ${top.toFixed(2)}, center ${center.toFixed(
-        2
-      )}, bottom ${bottom.toFixed(2)})`;
-      failStep(
-        !ordered
-          ? `Those readings didn't line up ${readings}. Redo it and look straight at each dot in turn.`
-          : `Your gaze barely moved ${readings}. Really look up at the top dot and down at the bottom dot — moving your head is fine.`,
-        "all"
-      );
+    // Final consistency check across all three points. A failure that points at
+    // one step redoes just that step; otherwise the whole run restarts.
+    const verdict = diagnoseCalibration(newPoints, noiseRef.current);
+    if (!verdict.ok) {
+      redoRef.current = null;
+      failStep(verdict.reason, verdict.badStep ?? "all");
       return;
     }
 
+    redoRef.current = null;
     setPhase("done");
     setTimeout(() => onComplete(newPoints), 350);
   }
 
-  // Retry after a failed capture — either the current step or the whole run.
+  // Retry after a failed capture — the current step, one named step, or the whole run.
   function retry() {
-    if (failModeRef.current === "all") {
+    const mode = failModeRef.current;
+    if (mode === "all") {
+      redoRef.current = null;
       setPoints({});
       noiseRef.current = {};
       if (stepIndex === 0) {
@@ -231,9 +187,16 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
       } else {
         setStepIndex(0); // the stepIndex effect restarts the run
       }
-    } else {
-      startStep();
+      return;
     }
+    const redoIndex = STEPS.findIndex((s) => s.key === mode);
+    if (redoIndex === -1) {
+      startStep(); // "step": just this capture again
+      return;
+    }
+    redoRef.current = redoIndex;
+    if (redoIndex === stepIndex) startStep();
+    else setStepIndex(redoIndex);
   }
 
   // Inner dot colour
@@ -357,7 +320,11 @@ export default function CalibrationScreen({ gazeData, onComplete, onCancel }) {
                 className="bg-indigo-600 hover:bg-indigo-500 rounded px-4 py-1.5 text-sm font-medium"
                 onClick={retry}
               >
-                {failModeRef.current === "all" ? "Restart calibration" : "Retry"}
+                {failModeRef.current === "all"
+                  ? "Restart calibration"
+                  : failModeRef.current === "step"
+                  ? "Retry"
+                  : `Redo the ${failModeRef.current} dot`}
               </button>
             </>
           ) : (

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { DrawingUtils, FaceLandmarker } from "@mediapipe/tasks-vision";
+import { LEVEL_COLORS } from "../gaze/trackingQuality.js";
 
 /**
  * Live face-mesh preview. Renders MediaPipe's 478-point face mesh (the same
@@ -12,8 +13,9 @@ import { DrawingUtils, FaceLandmarker } from "@mediapipe/tasks-vision";
  *   landmarksRef - ref holding the latest faceLandmarks[0] (or null)
  *   active       - whether the camera is running
  *   framingOk    - whether the face is currently well-framed (tints the mesh)
+ *   level        - tracking-quality colour level, shown as a glow around the preview
  */
-export default function FacePreview({ landmarksRef, active, framingOk = true }) {
+export default function FacePreview({ landmarksRef, active, framingOk = true, level = null }) {
   const canvasRef = useRef(null);
 
   // Mirror framingOk into a ref so the rAF loop reads the latest value without
@@ -90,7 +92,12 @@ export default function FacePreview({ landmarksRef, active, framingOk = true }) 
       ref={canvasRef}
       width={220}
       height={165}
-      className="block mx-auto w-full max-w-[150px] rounded-lg border border-slate-700"
+      className="block mx-auto w-full max-w-[150px] rounded-lg border border-slate-700 transition-shadow duration-500"
+      style={
+        level
+          ? { boxShadow: `0 0 12px 3px ${LEVEL_COLORS[level]}99`, borderColor: LEVEL_COLORS[level] }
+          : undefined
+      }
     />
   );
 }

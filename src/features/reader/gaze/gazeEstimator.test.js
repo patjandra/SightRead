@@ -90,7 +90,7 @@ describe("estimateGaze — vertical gaze blend", () => {
     const g = estimateGaze(
       makeResult({ scores: { eyeLookDownLeft: 1, eyeLookDownRight: 1 } })
     );
-    // eyeVertical = 1, *EYE_GAIN(4) => vertical 4 => rawY = 0.5 + 2 = 2.5
+    // eyeVertical = 1, *EYE_GAIN(3) => vertical 3 => rawY = 0.5 + 1.5 = 2.0
     expect(g.rawY).toBeGreaterThan(1);
   });
 });
@@ -107,5 +107,32 @@ describe("estimateGaze — gates", () => {
       makeResult({ scores: { eyeLookOutLeft: 0.4, eyeLookOutRight: 0.4 } })
     );
     expect(g.sideGaze).toBeGreaterThan(0);
+  });
+});
+
+describe("estimateGaze — quality", () => {
+  it("reports full quality for a well-framed face", () => {
+    expect(estimateGaze(makeResult()).quality).toBe(1);
+  });
+
+  it("reports zero quality with no face or when framing pauses tracking", () => {
+    expect(estimateGaze(null).quality).toBe(0);
+    const lm = makeLandmarks();
+    lm[0] = { x: 0.005, y: 0.5, z: 0 };
+    expect(estimateGaze(makeResult({ landmarks: lm })).quality).toBe(0);
+  });
+});
+
+describe("estimateGaze — head tilt with a fixed gaze", () => {
+  it("cancels: tilting the head up while the eyes roll down to stay on the same spot", () => {
+    // Head tilted up by 30 degrees: head term -0.5. The eyes roll down inside the
+    // head to keep looking at the same spot: eye term +0.5. Net gaze is unchanged.
+    const lm = makeLandmarks({ foreheadZ: 0.2309, chinZ: 0 });
+    const g = estimateGaze(
+      makeResult({ landmarks: lm, scores: { eyeLookDownLeft: 0.5, eyeLookDownRight: 0.5 } })
+    );
+    expect(g.headVertical).toBeCloseTo(-0.5, 2);
+    expect(g.eyeVertical).toBeCloseTo(0.5, 5);
+    expect(g.rawY).toBeCloseTo(0.5, 2);
   });
 });
