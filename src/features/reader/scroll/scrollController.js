@@ -11,22 +11,32 @@
  *   your gaze moves into a zone — no extra velocity momentum needed (that only
  *   caused the scroll to coast after you looked back to center).
  * Dwell: must stay in zone ≥ DWELL_MS before first scroll tick.
- * Smoothing: moving average over a ~300ms window on gaze position. The delta is
- *   scaled by elapsed time, so the controller behaves the same whether ticked
- *   at 20 or 60 FPS.
+ * Smoothing: One Euro filter on gaze position — steady at rest, quick to follow a
+ *   real move. The delta is scaled by elapsed time, so the controller behaves
+ *   the same whether ticked at 20 or 60 FPS.
  */
 
-import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
+import {
+  SCROLL_UP_THRESHOLD,
+  SCROLL_DOWN_THRESHOLD,
+  GAZE_FILTER_MIN_CUTOFF,
+  GAZE_FILTER_BETA,
+  GAP_HOLD_MS,
+} from "../../../config.js";
+import { createOneEuroFilter } from "../gaze/oneEuroFilter.js";
 
 const MAX_SPEED_PX_PER_SEC = 200;
 const DWELL_MS = 250;
-const SMOOTH_WINDOW = 18; // ~300ms at 60fps
 
 export function createScrollController() {
-  const gazeBuffer = [];
+  const smoother = createOneEuroFilter({
+    minCutoff: GAZE_FILTER_MIN_CUTOFF,
+    beta: GAZE_FILTER_BETA,
+  });
   let dwellStart = null;
   let lastZone = "neutral";
   let isDwelling = false;
+  let gapStart = null;
 
   function getZone(y) {
     if (y < SCROLL_UP_THRESHOLD) return "up";
@@ -56,12 +66,8 @@ export function createScrollController() {
    * @returns {number} pixel delta to apply (negative = scroll up)
    */
   function update(calibratedY, deltaTimeSec, sensitivity) {
-    // Maintain smoothing buffer
-    gazeBuffer.push(calibratedY);
-    if (gazeBuffer.length > SMOOTH_WINDOW) gazeBuffer.shift();
-
-    const smoothY =
-      gazeBuffer.reduce((a, b) => a + b, 0) / gazeBuffer.length;
+    gapStart = null;
+    const smoothY = smoother.filter(calibratedY, deltaTimeSec);
 
     const zone = getZone(smoothY);
     const now = performance.now();
@@ -93,12 +99,27 @@ export function createScrollController() {
     return zone === "up" ? -pixels : pixels;
   }
 
+  /**
+   * Tracking dropped out this frame (blink, missed face). Scrolling pauses, but
+   * the filter and dwell state survive a short gap so a blink doesn't restart
+   * the dwell; a longer gap resets everything.
+   *
+   * @returns {0}
+   */
+  function pause() {
+    const now = performance.now();
+    if (gapStart === null) gapStart = now;
+    else if (now - gapStart > GAP_HOLD_MS) reset();
+    return 0;
+  }
+
   function reset() {
-    gazeBuffer.length = 0;
+    gapStart = null;
+    smoother.reset();
     dwellStart = null;
     lastZone = "neutral";
     isDwelling = false;
   }
 
-  return { update, reset };
+  return { update, pause, reset };
 }

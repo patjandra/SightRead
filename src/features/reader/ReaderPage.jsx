@@ -6,8 +6,14 @@ import { mapRawToCalibratedY, isProfileCalibrated } from "./gaze/calibrationMana
 import { usePdfLibrary } from "../library/usePdfLibrary.js";
 import PDFViewer from "./components/PDFViewer.jsx";
 import CalibrationScreen from "./components/CalibrationScreen.jsx";
+import CalibrationCheck from "./components/CalibrationCheck.jsx";
+import RecenterScreen from "./components/RecenterScreen.jsx";
 import ControlPanel from "./components/ControlPanel.jsx";
 import TrackingWarning from "./components/TrackingWarning.jsx";
+import TrackingPausedNotice from "./components/TrackingPausedNotice.jsx";
+import { useManualScrollPause } from "./hooks/useManualScrollPause.js";
+import { useTrackingKeybind } from "./hooks/useTrackingKeybind.js";
+import { loadBinding, saveBinding } from "./keybind.js";
 import UploadLocalProfilesDialog from "./components/UploadLocalProfilesDialog.jsx";
 import { useOnSignOut } from "../auth/useOnSignOut.js";
 import { useAuth } from "../auth/useAuth.js";
@@ -171,9 +177,6 @@ export default function ReaderPage() {
   const trackingReady =
     mediapipeReady && isProfileCalibrated(selectedProfile) && !!pdfUrl;
 
-  const handleToggleTracking = useCallback(() => {
-    setIsTracking((t) => !t);
-  }, []);
 
   // ── Calibration ────────────────────────────────────────────────────────────
   const [isCalibrating, setIsCalibrating] = useState(false);
@@ -184,11 +187,34 @@ export default function ReaderPage() {
     setIsCalibrating(true);
   }, [selectedProfile]);
 
+  // Points just captured, shown in a "try it" check before they are saved.
+  const [pendingPoints, setPendingPoints] = useState(null);
+
+  // Session-only shift from "Recenter", undoing drift since calibration. It is
+  // deliberately not stored anywhere: it resets on reload, profile switch and
+  // recalibration.
+  const [recenterOffset, setRecenterOffset] = useState(0);
+  const [isRecentering, setIsRecentering] = useState(false);
+
+  useEffect(() => {
+    setRecenterOffset(0);
+  }, [selectedId]);
+
+  const handleStartRecenter = useCallback(() => {
+    setIsTracking(false);
+    setIsRecentering(true);
+  }, []);
+
+  const handleRecenterDone = useCallback((offset) => {
+    setIsRecentering(false);
+    if (offset !== null) setRecenterOffset(offset);
+  }, []);
+
   // ── Camera lifecycle ─────────────────────────────────────────────────────
   // The webcam is only needed while tracking or calibrating; keep it off
   // otherwise so it isn't running (and its indicator light on) when idle.
   // startCamera/stopCamera are idempotent, so this stays in sync with intent.
-  const cameraShouldBeOn = isTracking || isCalibrating;
+  const cameraShouldBeOn = isTracking || isCalibrating || isRecentering || !!pendingPoints;
 
   useEffect(() => {
     if (cameraShouldBeOn) {
@@ -199,17 +225,28 @@ export default function ReaderPage() {
   }, [cameraShouldBeOn, startCamera, stopCamera]);
 
   // Always calibrates the currently selected profile.
-  const handleCalibrationComplete = useCallback(
-    (points) => {
-      setIsCalibrating(false);
-      updateSelectedProfile(points);
-    },
-    [updateSelectedProfile]
-  );
+  // A finished capture goes to the "try it" check first; only Accept saves it.
+  const handleCalibrationComplete = useCallback((points) => {
+    setIsCalibrating(false);
+    setPendingPoints(points);
+  }, []);
 
   const handleCalibrationCancel = useCallback(() => {
     setIsCalibrating(false);
   }, []);
+
+  const handleCheckAccept = useCallback(() => {
+    updateSelectedProfile(pendingPoints);
+    setRecenterOffset(0);
+    setPendingPoints(null);
+  }, [pendingPoints, updateSelectedProfile]);
+
+  const handleCheckRedo = useCallback(() => {
+    setPendingPoints(null);
+    setIsCalibrating(true);
+  }, []);
+
+  const handleCheckCancel = useCallback(() => setPendingPoints(null), []);
 
   // ── Sensitivity ────────────────────────────────────────────────────────────
   const [sensitivity, setSensitivity] = useState(0.4);
@@ -221,9 +258,61 @@ export default function ReaderPage() {
     gazeData,
     selectedProfile,
     isTracking,
+    offset: recenterOffset,
     sensitivity,
     confidenceThreshold: CONFIDENCE_THRESHOLD,
     scrollContainerRef,
+  });
+
+  // ── Manual scroll pauses tracking ────────────────────────────────────────
+  // Scrolling by hand while tracking turns tracking off, so the page doesn't
+  // fight the user, and says so for a few seconds.
+  const [notice, setNotice] = useState(null); // { message, kind } | null
+  const pausedTimerRef = useRef(null);
+
+  const flashNotice = useCallback((message, kind) => {
+    setNotice({ message, kind });
+    clearTimeout(pausedTimerRef.current);
+    pausedTimerRef.current = setTimeout(() => setNotice(null), 3500);
+  }, []);
+
+  const handleManualScroll = useCallback(() => {
+    setIsTracking(false);
+    flashNotice("Tracking paused — you scrolled manually.", "paused");
+  }, [flashNotice]);
+
+  // Start/pause from the button or the shortcut. Starting with no PDF open says
+  // why it didn't start instead of silently doing nothing.
+  const handleToggleTracking = useCallback(() => {
+    if (isTracking) return setIsTracking(false);
+    if (!trackingReady) {
+      if (!pdfUrl) flashNotice("Upload or select a PDF before starting tracking.", "alert");
+      return;
+    }
+    setIsTracking(true);
+  }, [isTracking, trackingReady, pdfUrl, flashNotice]);
+
+  useEffect(() => () => clearTimeout(pausedTimerRef.current), []);
+
+  useManualScrollPause({
+    active: isTracking,
+    containerRef: scrollContainerRef,
+    onManualScroll: handleManualScroll,
+  });
+
+  // ── Start/stop shortcut ───────────────────────────────────────────────────
+  const [trackingKey, setTrackingKey] = useState(loadBinding);
+  const [capturingKey, setCapturingKey] = useState(false);
+
+  const handleSetTrackingKey = useCallback((binding) => {
+    saveBinding(binding);
+    setTrackingKey(binding);
+  }, []);
+
+  useTrackingKeybind({
+    binding: trackingKey,
+    disabled: capturingKey || isCalibrating || isRecentering || !!pendingPoints,
+    onToggle: handleToggleTracking,
   });
 
   // ── Tracking warning ───────────────────────────────────────────────────────
@@ -270,7 +359,7 @@ export default function ReaderPage() {
   const debugCalibratedY = !isProfileCalibrated(selectedProfile)
     ? null
     : confidentGaze
-    ? mapRawToCalibratedY(gazeData.rawY, selectedProfile)
+    ? mapRawToCalibratedY(gazeData.rawY, selectedProfile, recenterOffset)
     : 0.5;
 
   return (
@@ -286,6 +375,7 @@ export default function ReaderPage() {
       />
 
       <TrackingWarning show={showWarning} message={warningMessage} />
+      <TrackingPausedNotice show={!!notice && !showWarning} message={notice?.message} kind={notice?.kind} />
 
       {uploadOffer && user && (
         <UploadLocalProfilesDialog
@@ -300,6 +390,24 @@ export default function ReaderPage() {
           gazeData={gazeData}
           onComplete={handleCalibrationComplete}
           onCancel={handleCalibrationCancel}
+        />
+      )}
+
+      {pendingPoints && (
+        <CalibrationCheck
+          gazeData={gazeData}
+          points={pendingPoints}
+          onAccept={handleCheckAccept}
+          onRedo={handleCheckRedo}
+          onCancel={handleCheckCancel}
+        />
+      )}
+
+      {isRecentering && (
+        <RecenterScreen
+          gazeData={gazeData}
+          profile={selectedProfile}
+          onDone={handleRecenterDone}
         />
       )}
 
@@ -339,8 +447,14 @@ export default function ReaderPage() {
           onRetrySync={retrySync}
           onStartCalibration={handleStartCalibration}
           isCalibrating={isCalibrating}
+          onRecenter={handleStartRecenter}
+          onResetRecenter={() => setRecenterOffset(0)}
+          recentered={recenterOffset !== 0}
           isTracking={isTracking}
           onToggleTracking={handleToggleTracking}
+          trackingKey={trackingKey}
+          onSetTrackingKey={handleSetTrackingKey}
+          onCapturingKeyChange={setCapturingKey}
           trackingReady={trackingReady}
           sensitivity={sensitivity}
           onSensitivityChange={setSensitivity}

@@ -89,3 +89,25 @@ describe("scrollController speed", () => {
     expect(twoFrame).toBeCloseTo(oneFrame * 2, 5);
   });
 });
+
+describe("scrollController dropouts", () => {
+  it("keeps the dwell state through a short gap (a blink)", () => {
+    const c = createScrollController();
+    scrollAfterDwell(c, 0.95); // dwelling, scrolling
+    c.pause();
+    clock += 100; // under GAP_HOLD_MS
+    expect(c.pause()).toBe(0);
+    expect(c.update(0.95, DT, 1)).toBeGreaterThan(0); // no new dwell wait
+  });
+
+  it("forgets the dwell after a long gap", () => {
+    const c = createScrollController();
+    scrollAfterDwell(c, 0.95);
+    c.pause();
+    clock += 100;
+    c.pause();
+    clock += 400; // total gap now over GAP_HOLD_MS
+    c.pause();
+    expect(c.update(0.95, DT, 1)).toBe(0); // dwell starts over
+  });
+});

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ProfileSelector from "./ProfileSelector.jsx";
 import PdfLibrarySection from "../../library/PdfLibrarySection.jsx";
 import FacePreview from "./FacePreview.jsx";
@@ -6,6 +6,7 @@ import AccountSection from "../../auth/AccountSection.jsx";
 import OfflineBadge from "./OfflineBadge.jsx";
 import SectionToggle from "./SectionToggle.jsx";
 import { useSectionOpen } from "../hooks/useSectionOpen.js";
+import { eventToBinding, formatBinding, isScrollKey } from "../keybind.js";
 import { SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "../../../config.js";
 import {
   isProfileCalibrated,
@@ -76,10 +77,16 @@ export default function ControlPanel({
   // Calibration
   onStartCalibration,
   isCalibrating,
+  onRecenter,
+  onResetRecenter,
+  recentered,
   // Tracking
   isTracking,
   onToggleTracking,
   trackingReady,
+  trackingKey,
+  onSetTrackingKey,
+  onCapturingKeyChange,
   // Sensitivity
   sensitivity,
   onSensitivityChange,
@@ -102,6 +109,38 @@ export default function ControlPanel({
   const [profileOpen, toggleProfile] = useSectionOpen("profile");
   const [faceOpen, toggleFace] = useSectionOpen("face");
   const [gazeOpen, toggleGaze] = useSectionOpen("gaze");
+  const [sensitivityOpen, toggleSensitivity] = useSectionOpen("sensitivity");
+  const [zoomOpen, toggleZoom] = useSectionOpen("zoom");
+
+  // Shortcut capture: the next key press becomes the start/stop shortcut.
+  const [capturing, setCapturing] = useState(false);
+  const [keyError, setKeyError] = useState("");
+
+  function setCapture(on) {
+    setCapturing(on);
+    onCapturingKeyChange?.(on);
+  }
+
+  useEffect(() => {
+    if (!capturing) return;
+    const onKey = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code === "Escape") return setCapture(false);
+      const binding = eventToBinding(e);
+      if (!binding) return; // a bare modifier; wait for the real key
+      if (isScrollKey(binding.code)) {
+        setKeyError("That key scrolls the page. Pick another.");
+        return;
+      }
+      setKeyError("");
+      onSetTrackingKey(binding);
+      setCapture(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturing]);
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
@@ -139,7 +178,7 @@ export default function ControlPanel({
   }
 
   return (
-    <aside className="sr-scroll w-64 flex-shrink-0 bg-slate-800 text-slate-100 flex flex-col gap-3 px-3 py-3 overflow-y-auto text-sm border-r border-slate-700">
+    <aside className="sr-scroll w-64 flex-shrink-0 bg-slate-800 text-slate-100 flex flex-col gap-4 px-3 py-3 overflow-y-auto text-sm border-r border-slate-700">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -253,9 +292,29 @@ export default function ControlPanel({
             )}
           </div>
         )}
+        {/* Recenter: fix drift without a full recalibration */}
+        {profileOpen && selectedProfile && isProfileCalibrated(selectedProfile) && (
+          <div>
+            <button
+              className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
+              onClick={onRecenter}
+              disabled={!mediapipeReady || isCalibrating}
+            >
+              Recenter
+            </button>
+            {recentered && (
+              <p className="text-xs text-slate-500 mt-1.5">
+                Recentered for this session.{" "}
+                <button className="underline hover:text-slate-300" onClick={onResetRecenter}>
+                  Undo
+                </button>
+              </p>
+            )}
+          </div>
+        )}
         {/* Tracking */}
         {profileOpen && (
-          <div>
+          <div className="pt-2">
             <button
               className={`w-full rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-40 focus:outline-none focus:ring-2 ${
                 isTracking
@@ -263,11 +322,36 @@ export default function ControlPanel({
                   : "bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500/50 disabled:hover:bg-emerald-600"
               }`}
               onClick={onToggleTracking}
-              disabled={!trackingReady}
+              // A missing PDF is reported on click instead of disabling the button.
+              disabled={!isTracking && !(mediapipeReady && isProfileCalibrated(selectedProfile))}
             >
               {isTracking ? "Pause tracking" : "Start tracking"}
             </button>
-            {!trackingReady && (
+            <div className="mt-1.5 flex items-center gap-2">
+              <button
+                className="flex-1 bg-slate-700 hover:bg-slate-600 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
+                onClick={() => {
+                  setKeyError("");
+                  setCapture(!capturing);
+                }}
+              >
+                {capturing
+                  ? "Press a key… (Esc to cancel)"
+                  : trackingKey
+                  ? `Shortcut: ${formatBinding(trackingKey)}`
+                  : "Set keybind"}
+              </button>
+              {trackingKey && !capturing && (
+                <button
+                  className="text-xs text-slate-500 hover:text-slate-300 underline"
+                  onClick={() => onSetTrackingKey(null)}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {keyError && <p className="text-xs text-red-400 mt-1">{keyError}</p>}
+            {!trackingReady && (!mediapipeReady || !isProfileCalibrated(selectedProfile)) && (
               <p className="text-xs text-slate-500 mt-1.5">
                 {!mediapipeReady
                   ? "Waiting for model…"
@@ -277,8 +361,6 @@ export default function ControlPanel({
                   ? "Recalibrate the profile first."
                   : !isProfileCalibrated(selectedProfile)
                   ? "Calibrate the profile first."
-                  : !hasPdf
-                  ? "Upload a PDF first."
                   : ""}
               </p>
             )}
@@ -299,52 +381,58 @@ export default function ControlPanel({
       {/* Sensitivity */}
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <SectionLabel>Sensitivity</SectionLabel>
+          <SectionToggle open={sensitivityOpen} onToggle={toggleSensitivity}>Sensitivity</SectionToggle>
           <span className="text-xs font-mono text-slate-300 tabular-nums">
             {sensitivity.toFixed(2)}
           </span>
         </div>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={sensitivityToSlider(sensitivity)}
-          onChange={(e) => onSensitivityChange(sliderToSensitivity(parseFloat(e.target.value)))}
-          className="w-full accent-indigo-500 cursor-pointer"
-        />
-        <div className="flex justify-between text-[10px] text-slate-600">
-          <span>0.10</span>
-          <span>0.40</span>
-          <span>1.60</span>
-        </div>
+        {sensitivityOpen && (
+          <>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={sensitivityToSlider(sensitivity)}
+            onChange={(e) => onSensitivityChange(sliderToSensitivity(parseFloat(e.target.value)))}
+            className="block w-full accent-indigo-500 cursor-pointer"
+          />
+          <div className="flex justify-between text-[10px] text-slate-100 !mt-0.5 leading-none">
+            <span>0.10</span>
+            <span>0.40</span>
+            <span>1.60</span>
+          </div>
+          </>
+        )}
       </section>
 
       {/* Zoom */}
       <section className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <SectionLabel>Zoom</SectionLabel>
+          <SectionToggle open={zoomOpen} onToggle={toggleZoom}>Zoom</SectionToggle>
           <span className="text-xs font-mono text-slate-300 tabular-nums">
             {Math.round(zoom * 100)}%
           </span>
         </div>
-        <div className="flex items-center rounded-lg border border-slate-600 overflow-hidden">
-          <button
-            className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
-            onClick={onZoomOut}
-            aria-label="Zoom out"
-          >
-            −
-          </button>
-          <div className="w-px self-stretch bg-slate-600" />
-          <button
-            className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
-            onClick={onZoomIn}
-            aria-label="Zoom in"
-          >
-            +
-          </button>
-        </div>
+        {zoomOpen && (
+          <div className="flex items-center rounded-lg border border-slate-600 overflow-hidden">
+            <button
+              className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
+              onClick={onZoomOut}
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <div className="w-px self-stretch bg-slate-600" />
+            <button
+              className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
+              onClick={onZoomIn}
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+          </div>
+        )}
       </section>
 
       {/* Face preview — shows what the camera sees and how you're framed */}
@@ -384,7 +472,7 @@ export default function ControlPanel({
       </section>
 
       {/* Debug */}
-      <section className="mt-auto border-t border-slate-700 pt-3">
+      <section>
         <SectionToggle open={gazeOpen} onToggle={toggleGaze} className="mb-1.5">
           Gaze data
         </SectionToggle>

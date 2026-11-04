@@ -22,3 +22,13 @@ export const CALIBRATION_VERSION = 5;
 // threshold) to make scrolling up as easy to trigger as scrolling down.
 export const SCROLL_UP_THRESHOLD = 0.47;   // calibratedY below this → scroll up
 export const SCROLL_DOWN_THRESHOLD = 0.62; // calibratedY above this → scroll down
+
+// One Euro filter on the calibrated gaze position (see gaze/oneEuroFilter.js).
+// Lower MIN_CUTOFF = steadier at rest but laggier; higher BETA = quicker catch-up
+// when the gaze moves fast. Tune by feel on a real camera.
+export const GAZE_FILTER_MIN_CUTOFF = 1.0;
+export const GAZE_FILTER_BETA = 0.02;
+
+// How long tracking may drop out (a blink, a missed frame) before the scroll
+// controller forgets its dwell state. Scrolling itself is paused during the gap.
+export const GAP_HOLD_MS = 250;

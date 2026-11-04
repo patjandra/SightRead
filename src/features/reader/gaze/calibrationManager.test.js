@@ -79,3 +79,59 @@ describe("isCalibrationStale", () => {
     expect(isCalibrationStale({ calibrationVersion: 1 })).toBe(false);
   });
 });
+
+import { isUsableSample, diagnoseCalibration, SETTLE_MS } from "./calibrationManager.js";
+
+describe("isUsableSample", () => {
+  const good = { confidence: 1, hasFace: true, sideGaze: 0.1 };
+
+  it("discards frames while the eyes are still settling", () => {
+    expect(isUsableSample(good, SETTLE_MS - 1)).toBe(false);
+    expect(isUsableSample(good, SETTLE_MS)).toBe(true);
+  });
+
+  it("rejects low confidence, no face, and strong sideways gaze", () => {
+    expect(isUsableSample({ ...good, confidence: 0.2 }, 1000)).toBe(false);
+    expect(isUsableSample({ ...good, hasFace: false }, 1000)).toBe(false);
+    expect(isUsableSample({ ...good, sideGaze: 0.9 }, 1000)).toBe(false);
+  });
+});
+
+describe("diagnoseCalibration", () => {
+  const noise = { top: 0.01, center: 0.01, bottom: 0.01 };
+
+  it("accepts ordered points with a clear span", () => {
+    expect(diagnoseCalibration({ top: 0.2, center: 0.5, bottom: 0.8 }, noise)).toEqual({ ok: true });
+  });
+
+  it("blames the noisier of the two steps that break the order", () => {
+    const r = diagnoseCalibration({ top: 0.6, center: 0.5, bottom: 0.8 }, { ...noise, top: 0.2 });
+    expect(r).toMatchObject({ ok: false, badStep: "top" });
+    const r2 = diagnoseCalibration({ top: 0.2, center: 0.9, bottom: 0.8 }, { ...noise, bottom: 0.2 });
+    expect(r2).toMatchObject({ ok: false, badStep: "bottom" });
+  });
+
+  it("blames no single step when the order is fully reversed", () => {
+    const r = diagnoseCalibration({ top: 0.8, center: 0.5, bottom: 0.2 }, noise);
+    expect(r).toMatchObject({ ok: false, badStep: null });
+  });
+
+  it("reports a span that doesn't beat the noise as a whole-run problem", () => {
+    const r = diagnoseCalibration({ top: 0.5, center: 0.51, bottom: 0.52 }, { top: 0.05, center: 0.05, bottom: 0.05 });
+    expect(r).toMatchObject({ ok: false, badStep: null });
+    expect(r.reason).toMatch(/barely moved/);
+  });
+});
+
+describe("mapRawToCalibratedY offset", () => {
+  const profile = { points: { top: 0.2, center: 0.5, bottom: 0.8 } };
+
+  it("shifts the raw reading so a drifted center maps back to 0.5", () => {
+    expect(mapRawToCalibratedY(0.58, profile)).toBeGreaterThan(0.5);
+    expect(mapRawToCalibratedY(0.58, profile, 0.08)).toBeCloseTo(0.5);
+  });
+
+  it("is a no-op with no offset", () => {
+    expect(mapRawToCalibratedY(0.35, profile, 0)).toBe(mapRawToCalibratedY(0.35, profile));
+  });
+});
