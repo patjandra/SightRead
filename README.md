@@ -1,128 +1,160 @@
-👁️ SightRead
+# SightRead
 
-SightRead is a gaze-based scrolling application that allows musicians to read digital sheet music hands-free. By tracking eye movement through a webcam, SightRead automatically scrolls content in real time—so you can play without interruption.
+**Hands-free page turning for sheet music.** SightRead is a web app that scrolls a PDF score as you read it, using your webcam to follow where you are looking, so you never have to take your hands off the instrument.
 
-🚀 Demo (Coming Soon)
+Live site: **[sightread.ing](https://sightread.ing)**
 
-Add a demo video or GIF here
+[![CI](https://github.com/patjandra/SightRead/actions/workflows/ci.yml/badge.svg)](https://github.com/patjandra/SightRead/actions/workflows/ci.yml)
 
-🧠 Motivation
+## The idea
 
-Musicians using digital sheet music often face a simple but frustrating problem:
+Musicians reading digital scores have two bad options: stop playing to scroll, or use tempo-based auto-scroll that never quite matches their pace. SightRead instead scrolls when your gaze reaches the lower part of the page (and back up when it reaches the upper part), so the scroll rate follows how fast you actually read.
 
-Stop playing to scroll manually
-Or rely on tempo-based auto-scroll that doesn’t match their pace
+## Features
 
-SightRead solves this by adapting to the user’s natural reading speed, using gaze tracking to control scrolling dynamically.
+- **Gaze-controlled scrolling.** Eye blendshapes from MediaPipe's face landmarker, blended with head pitch, are mapped to a vertical gaze position. Looking into the bottom zone scrolls down; the top zone scrolls up. The signal is smoothed with a One Euro filter, and brief dropouts such as blinks are tolerated.
+- **Local, in-browser inference.** The face landmarker model and WASM runtime ship with the app (`public/mediapipe-*`) and run on your device.
+- **3-point calibration** (top, middle, bottom of the page), with a calibration check and a recenter step.
+- **Per-user profiles.** Keep several calibration profiles (for example per room or seat) and switch between them. Profiles are stored locally by default.
+- **Optional Google sign-in.** Signing in lets you save calibration profiles and PDFs to your account and use them across devices. The app works without an account.
+- **PDF library.** Signed-in users can save PDFs to their account (duplicate files are detected by SHA-256). Limits: 25 MB per file, 100 files and 500 MB per user.
+- **Offline support.** A service worker caches the app shell, hashed bundles, and the MediaPipe files; PDFs can also be kept as offline copies.
+- **Reader controls.** Zoom, sensitivity, a configurable keyboard shortcut to start/pause tracking, automatic pause when you scroll manually, and a notice when tracking is lost.
 
-✨ Features
-🎼 Core Functionality
-Upload and view sheet music PDFs
-Continuous vertical scrolling
-Hands-free control using eye movement
-Smooth, dynamic scroll speed based on gaze position
-👁️ Gaze Tracking
-Webcam-based tracking using MediaPipe
-Simple calibration (top / middle / bottom)
-Real-time gaze estimation
-Confidence-based tracking with automatic pause
-⚙️ Controls
-Start / Pause tracking toggle
-Sensitivity adjustment
-Zoom in/out for sheet music
-Multiple local calibration profiles
-🔒 Privacy First
-No images or video stored
-Only calibration data saved locally
-No backend or login required
-🏗️ Architecture
+## Privacy
 
-Webcam → MediaPipe → Face/Eye Landmarks
-→ Gaze Estimation
-→ Calibration Mapping
-→ Scroll Controller
-→ PDF Viewer
+- Webcam video is processed in your browser and is **never uploaded or stored**.
+- Without an account, calibration data stays in your browser.
+- With an account, the server stores your Google identity (subject ID, email, name, picture), your calibration values, and the PDFs you choose to save. PDFs live in a private R2 bucket and are only served through the authenticated Worker.
+- The service worker never caches `/api/*` responses or non-GET requests.
 
-🛠️ Tech Stack
-Frontend (Web MVP)
-React (Vite)
-Tailwind CSS
-PDF.js / react-pdf
-MediaPipe (Face Landmarker)
-Desktop (Planned)
-Electron or Tauri
-OS-level scroll simulation (robotjs / nut.js)
-📁 Project Structure
-src/
-  components/
-    PDFViewer.jsx
-    CalibrationScreen.jsx
-    ControlPanel.jsx
-    ProfileSelector.jsx
-    TrackingWarning.jsx
+See the in-app Privacy and Terms pages (`/privacy`, `/terms`).
 
-  gaze/
-    mediapipeTracker.js
-    gazeEstimator.js
-    calibrationManager.js
+## Tech stack
 
-  scroll/
-    scrollController.js
+| Layer | Technology |
+| --- | --- |
+| UI | React 18, React Router, Tailwind CSS, Vite |
+| PDF rendering | `react-pdf` / `pdfjs-dist` |
+| Gaze tracking | `@mediapipe/tasks-vision` (Face Landmarker, self-hosted model and WASM) |
+| API | Cloudflare Worker using Hono |
+| Auth | Google Identity Services ID token, verified with `jose`; signed session cookie |
+| Database | Cloudflare D1 (SQLite) |
+| File storage | Cloudflare R2 |
+| Offline | Service worker (`public/sw.js`) |
+| Tests / CI | Vitest, Testing Library, GitHub Actions (Node 22) |
 
-  hooks/
-    useGazeTracking.js
-    useScrollControl.js
-    useLocalProfiles.js
-⚙️ How It Works
-1. Calibration
+## Architecture
 
-Users look at three points (top, center, bottom).
-This creates a mapping from raw gaze data → screen position.
+```mermaid
+flowchart LR
+  subgraph Browser
+    Cam[Webcam] --> MP[MediaPipe Face Landmarker]
+    MP --> GE[Gaze estimator] --> F[One Euro filter]
+    F --> CAL[Calibration mapping] --> SC[Scroll controller] --> PDF[PDF viewer]
+    SW[Service worker cache]
+  end
+  subgraph Cloudflare
+    A[Static assets] ~~~ W[Worker / Hono API]
+    W --> D1[(D1: users, profiles, PDFs)]
+    W --> R2[(R2: PDF files)]
+  end
+  Browser -- "/api/*" --> W
+```
 
-2. Gaze Detection
+The Worker serves the built SPA from `dist/` (with SPA fallback) and runs first only for `/api/*`:
 
-MediaPipe tracks facial and eye landmarks.
-A normalized vertical gaze value is computed:
+| Route prefix | Purpose |
+| --- | --- |
+| `/api/auth` | Google sign-in, session |
+| `/api/calibrations` | Sync calibration profiles (soft deletes so other devices learn of removals) |
+| `/api/pdfs` | Save, list, fetch, delete account PDFs |
+| `/api/account` | Account management |
 
-gazeY ∈ [0, 1]
-3. Scroll Logic
-Top 30% → scroll up
-Middle 40% → no scroll
-Bottom 30% → scroll down
+State-changing requests are protected by an Origin check and a custom-header CSRF middleware on top of `SameSite=Lax` cookies.
 
-Scroll speed increases the further the gaze is from the center using a non-linear curve.
+## Getting started
 
-🎯 MVP Scope
-Web-based application
-PDF upload + viewer
-Webcam gaze tracking
-Smooth scroll based on gaze
-Local calibration profiles
-No external integrations
-🧪 Running Locally
+Requires Node 22 (as used in CI) and npm.
+
+```bash
 npm install
-npm run dev
+cp .dev.vars.example .dev.vars   # then edit; see Configuration
+npm run db:migrate:local         # create the local D1 tables
+npm run dev                      # Vite on :5173 + wrangler dev on :8787
+```
 
-Open in browser:
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Run the web app and Worker API together |
+| `npm run dev:web` / `npm run dev:api` | Run only one of the two |
+| `npm test` | Run the Vitest suite once |
+| `npm run test:watch` | Vitest in watch mode |
+| `npm run build` | Production build into `dist/` |
+| `npm run preview` | Preview the built app |
+| `npm run db:migrate:local` / `:staging` / `:production` | Apply D1 migrations |
+| `npm run deploy:dry-run` | Build and dry-run a staging deploy |
+| `npm run deploy:staging` / `deploy:production` | Build and deploy |
 
-http://localhost:5173
-🖥️ Desktop Roadmap
+Webcam access requires a secure context; `localhost` qualifies.
 
-Future versions will include:
+## Configuration
 
-Desktop app (Electron/Tauri)
-Global toggle (on/off)
-Scroll any application (PDFs, browsers, etc.)
-OS-level scroll injection
-⚠️ Limitations
-Gaze tracking is approximate (not hardware-grade)
-Requires good lighting and webcam positioning
-Optimized for vertical scrolling
-Desktop-level control not yet implemented
-🛣️ Future Work
-Improved gaze accuracy and smoothing
-Full-screen calibration (2D mapping)
-Keyboard shortcuts
-Cross-device profile sync
-Hardware eye tracker support
-General-purpose scrolling beyond musicians
+`wrangler.jsonc` defines three environments: top level (local `wrangler dev`), `staging` (Worker `sightread-staging`), and `production` (Worker `sightread-production`, custom domain `sightread.ing`). Each has its own D1 database and R2 bucket (`PDFS`), and bindings are repeated per environment because Wrangler does not inherit them.
+
+Local variables go in `.dev.vars` (gitignored); `.dev.vars.example` is the template:
+
+| Variable | Purpose |
+| --- | --- |
+| `SESSION_SECRET` | Signs session cookies; use at least 32 random characters (`openssl rand -base64 32`) |
+| `GOOGLE_CLIENT_ID` | Google OAuth web client ID (public value; set under `vars` in `wrangler.jsonc` per environment) |
+| `ALLOWED_ORIGINS` | Local dev only: allows the Vite origin (`http://localhost:5173`) through the CSRF check |
+| `INSECURE_DEV_COOKIES` | Local dev only: non-Secure cookies for Safari on `http://localhost` |
+
+To run your own copy, create a Google OAuth web client and a D1 database and R2 bucket per environment, then put your own client IDs and database IDs in `wrangler.jsonc`.
+
+## Deployment
+
+```bash
+# one-time per environment: secret for session cookies
+npx wrangler secret put SESSION_SECRET --env staging
+npx wrangler secret put SESSION_SECRET --env production
+
+# apply schema migrations (migrations/*.sql)
+npm run db:migrate:staging
+npm run db:migrate:production
+
+# build and deploy
+npm run deploy:staging
+npm run deploy:production
+```
+
+`ALLOWED_ORIGINS` and `INSECURE_DEV_COOKIES` should be unset in staging and production.
+
+## Project structure
+
+```
+src/
+  App.jsx, main.jsx, config.js     routes, entry, shared gaze/scroll tunables
+  features/
+    reader/                        reader page, PDF viewer, controls, keybinding
+      gaze/                        estimator, calibration, filter, profile store and sync
+      scroll/                      scroll controller
+      hooks/, components/
+    library/                       account PDF library and offline copies
+    auth/                          Google sign-in and session client
+    legal/                         privacy and terms pages
+worker/
+  index.js                         Hono app
+  routes/, services/, middleware/  API handlers, D1/R2/session logic, CSRF and auth
+migrations/                        D1 schema (users, calibration profiles, PDFs, PDF hash)
+public/
+  sw.js                            service worker
+  mediapipe-models/, mediapipe-wasm/
+wrangler.jsonc                     Worker, assets, D1, R2, environments
+.github/workflows/ci.yml           install, test, build
+```
+
+## Contributing
+
+Run `npm test` and `npm run build` before opening a pull request; CI runs the same two steps.
