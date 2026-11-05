@@ -75,6 +75,19 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
+      <Section title="Spotify">
+        <p>
+          The Music section lets you connect your own Spotify account. By
+          default the connection lasts only for the current browser tab. If you
+          are signed in and tick "Remember me", we store an encrypted Spotify
+          refresh token with your account so Spotify is ready the next time you
+          sign in. We never store your Spotify password, listening history, or
+          playlists, and we can't play anything without your connection. "Disconnect
+          Spotify" and deleting your account both remove the stored token. You
+          can also revoke access any time from your Spotify account settings.
+        </p>
+      </Section>
+
       <Section title="Sharing">
         <p>
           We do not sell your information or share it with advertisers. Sign-in

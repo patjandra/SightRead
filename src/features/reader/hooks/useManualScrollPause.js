@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import { isScrollKeyEvent, isTypingTarget } from "../keybind.js";
 
+// Controls that use scroll keys themselves (a slider's arrows) mark their
+// section data-no-scroll-pause so using them doesn't pause tracking.
+const inOptOut = (target) => !!target?.closest?.("[data-no-scroll-pause]");
+
 /**
  * While `active`, calls `onManualScroll` the moment the user scrolls the reader
  * themselves: mouse wheel or trackpad, touch drag, or a scrolling key. Listens
@@ -17,7 +21,7 @@ export function useManualScrollPause({ active, containerRef, onManualScroll }) {
 
     const fire = () => callback.current();
     const onKey = (e) => {
-      if (isScrollKeyEvent(e) && !isTypingTarget(e.target)) fire();
+      if (isScrollKeyEvent(e) && !isTypingTarget(e.target) && !inOptOut(e.target)) fire();
     };
 
     container.addEventListener("wheel", fire, { passive: true });

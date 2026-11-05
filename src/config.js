@@ -53,3 +53,9 @@ export const GAZE_FILTER_BETA = 0.02;
 // How long tracking may drop out (a blink, a missed frame) before the scroll
 // controller forgets its dwell state. Scrolling itself is paused during the gap.
 export const GAP_HOLD_MS = 250;
+
+// Spotify app client ID. Public by design (PKCE needs no secret). Override with
+// VITE_SPOTIFY_CLIENT_ID at build time; with it empty the Music section explains
+// that Spotify isn't configured.
+export const SPOTIFY_CLIENT_ID =
+  import.meta.env?.VITE_SPOTIFY_CLIENT_ID || "389bac096d4e4f8ba4c00ceab154e64c";

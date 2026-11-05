@@ -108,7 +108,8 @@ Local variables go in `.dev.vars` (gitignored); `.dev.vars.example` is the templ
 | --- | --- |
 | `SESSION_SECRET` | Signs session cookies; use at least 32 random characters (`openssl rand -base64 32`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client ID (public value; set under `vars` in `wrangler.jsonc` per environment) |
-| `ALLOWED_ORIGINS` | Local dev only: allows the Vite origin (`http://localhost:5173`) through the CSRF check |
+| `ALLOWED_ORIGINS` | Local dev only: allows the Vite origins (`http://localhost:5173`, `http://127.0.0.1:5173`) through the CSRF check |
+| `SPOTIFY_TOKEN_KEY` | Encrypts remembered Spotify logins (AES-256-GCM); 32 random bytes, base64 (`openssl rand -base64 32`) |
 | `INSECURE_DEV_COOKIES` | Local dev only: non-Secure cookies for Safari on `http://localhost` |
 
 To run your own copy, create a Google OAuth web client and a D1 database and R2 bucket per environment, then put your own client IDs and database IDs in `wrangler.jsonc`.
@@ -119,6 +120,8 @@ To run your own copy, create a Google OAuth web client and a D1 database and R2 
 # one-time per environment: secret for session cookies
 npx wrangler secret put SESSION_SECRET --env staging
 npx wrangler secret put SESSION_SECRET --env production
+npx wrangler secret put SPOTIFY_TOKEN_KEY --env staging
+npx wrangler secret put SPOTIFY_TOKEN_KEY --env production
 
 # apply schema migrations (migrations/*.sql)
 npm run db:migrate:staging
