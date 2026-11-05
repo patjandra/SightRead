@@ -38,6 +38,9 @@ export default defineConfig({
     },
   },
   server: {
+    // Bind IPv4 so http://127.0.0.1:5173 works. Spotify's login rejects
+    // "localhost" as a redirect URI, and by default Vite listens on IPv6 only.
+    host: "127.0.0.1",
     // In dev the Worker (API) runs separately under `wrangler dev`; Vite serves
     // the UI and forwards /api to it. changeOrigin stays off so the Host header
     // keeps matching the browser's Origin, which the CSRF check compares.

@@ -2,7 +2,11 @@
 # Generate a secret with: openssl rand -base64 32
 SESSION_SECRET=replace-with-at-least-32-random-chars
 GOOGLE_CLIENT_ID=REPLACE_WITH_DEV_CLIENT_ID
-ALLOWED_ORIGINS=http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 # Safari refuses Secure cookies on http://localhost; only honored for localhost.
 INSECURE_DEV_COOKIES=true
+
+# Encrypts remembered Spotify logins. Generate with: openssl rand -base64 32
+SPOTIFY_TOKEN_KEY=replace-with-32-random-bytes-base64
+SPOTIFY_CLIENT_ID=REPLACE_WITH_SPOTIFY_CLIENT_ID

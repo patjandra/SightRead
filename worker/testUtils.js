@@ -7,6 +7,8 @@ import { upsertGoogleUser } from "./services/users.js";
 
 export const CLIENT_ID = "test-client.apps.googleusercontent.com";
 export const SESSION_SECRET = "test-session-secret-test-session-secret";
+// 32 bytes, base64url.
+export const SPOTIFY_TOKEN_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
 export const ORIGIN = "https://sightread.test";
 
 /** A local RSA key pair standing in for Google's signing keys. */
@@ -107,5 +109,12 @@ export function fakeR2() {
 }
 
 export function env(db, bucket = fakeR2()) {
-  return { DB: db, PDFS: bucket, GOOGLE_CLIENT_ID: CLIENT_ID, SESSION_SECRET };
+  return {
+    DB: db,
+    PDFS: bucket,
+    GOOGLE_CLIENT_ID: CLIENT_ID,
+    SESSION_SECRET,
+    SPOTIFY_CLIENT_ID: "spotify-client",
+    SPOTIFY_TOKEN_KEY,
+  };
 }

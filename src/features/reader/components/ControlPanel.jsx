@@ -5,6 +5,7 @@ import FacePreview from "./FacePreview.jsx";
 import AccountSection from "../../auth/AccountSection.jsx";
 import OfflineBadge from "./OfflineBadge.jsx";
 import SectionToggle from "./SectionToggle.jsx";
+import MusicSection from "../../spotify/MusicSection.jsx";
 import { useSectionOpen } from "../hooks/useSectionOpen.js";
 import { eventToBinding, formatBinding, isScrollKey } from "../keybind.js";
 import { scrollZones } from "../../../config.js";
@@ -108,12 +109,10 @@ export default function ControlPanel({
   qualityLevel,
 }) {
   const fileInputRef = useRef(null);
-  const [showFaceView, setShowFaceView] = useState(true);
   const [profileOpen, toggleProfile] = useSectionOpen("profile");
   const [faceOpen, toggleFace] = useSectionOpen("face");
   const [gazeOpen, toggleGaze] = useSectionOpen("gaze");
   const [sensitivityOpen, toggleSensitivity] = useSectionOpen("sensitivity");
-  const [zoomOpen, toggleZoom] = useSectionOpen("zoom");
 
   // Shortcut capture: the next key press becomes the start/stop shortcut.
   const [capturing, setCapturing] = useState(false);
@@ -211,7 +210,8 @@ export default function ControlPanel({
       </div>
 
       {/* Camera status */}
-      <section className="flex items-center justify-between">
+      <section className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
         <SectionLabel>Camera</SectionLabel>
         {mediapipeError ? (
           <span className="text-xs text-red-400 text-right">Error</span>
@@ -233,6 +233,32 @@ export default function ControlPanel({
         ) : (
           <span className="text-xs text-amber-400">Loading model…</span>
         )}
+        </div>
+
+        {/* Zoom */}
+        <div
+          className="flex items-center rounded-lg border border-slate-600 overflow-hidden flex-shrink-0"
+          role="group"
+          aria-label="Zoom"
+        >
+          <button
+            className="bg-slate-700 hover:bg-slate-600 w-6 py-0.5 text-sm leading-none transition-colors focus:outline-none focus:bg-slate-600"
+            onClick={onZoomOut}
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <span className="px-1.5 text-[11px] font-mono text-slate-300 tabular-nums text-center min-w-[2.75rem]">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            className="bg-slate-700 hover:bg-slate-600 w-6 py-0.5 text-sm leading-none transition-colors focus:outline-none focus:bg-slate-600"
+            onClick={onZoomIn}
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+        </div>
       </section>
       {mediapipeError && (
         <p className="-mt-2 text-xs text-red-400/90 leading-snug">{mediapipeError}</p>
@@ -408,58 +434,15 @@ export default function ControlPanel({
         )}
       </section>
 
-      {/* Zoom */}
-      <section className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <SectionToggle open={zoomOpen} onToggle={toggleZoom}>Zoom</SectionToggle>
-          <span className="text-xs font-mono text-slate-300 tabular-nums">
-            {Math.round(zoom * 100)}%
-          </span>
-        </div>
-        {zoomOpen && (
-          <div className="flex items-center rounded-lg border border-slate-600 overflow-hidden">
-            <button
-              className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
-              onClick={onZoomOut}
-              aria-label="Zoom out"
-            >
-              −
-            </button>
-            <div className="w-px self-stretch bg-slate-600" />
-            <button
-              className="flex-1 bg-slate-700 hover:bg-slate-600 py-1.5 text-base leading-none transition-colors focus:outline-none focus:bg-slate-600"
-              onClick={onZoomIn}
-              aria-label="Zoom in"
-            >
-              +
-            </button>
-          </div>
-        )}
-      </section>
+      {/* Music — Spotify search and playback */}
+      <MusicSection />
 
       {/* Face preview — shows what the camera sees and how you're framed */}
       <section className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <SectionToggle open={faceOpen} onToggle={toggleFace}>
-            Face view
-          </SectionToggle>
-          <button
-            onClick={() => setShowFaceView((v) => !v)}
-            role="switch"
-            aria-checked={showFaceView}
-            title={showFaceView ? "Hide face view" : "Show face view"}
-            className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
-              showFaceView ? "bg-indigo-600" : "bg-slate-600"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                showFaceView ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-        {faceOpen && showFaceView && (
+        <SectionToggle open={faceOpen} onToggle={toggleFace}>
+          Face view
+        </SectionToggle>
+        {faceOpen && (
           <>
             <FacePreview
               landmarksRef={landmarksRef}

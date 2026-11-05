@@ -21,7 +21,13 @@
   // through the Worker (never public).
   "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-local" }],
   // Public value. Replace with your Google OAuth web client ID (also in .dev.vars for local dev).
-  "vars": { "GOOGLE_CLIENT_ID": "649384260817-bb1kj82kblqg9ldrd8njk1klli2c7j1t.apps.googleusercontent.com" },
+  // SPOTIFY_CLIENT_ID is public and must equal SPOTIFY_CLIENT_ID in src/config.js
+  // (the Worker uses it to renew a remembered Spotify login). The encryption key
+  // SPOTIFY_TOKEN_KEY is a secret: `wrangler secret put SPOTIFY_TOKEN_KEY`.
+  "vars": {
+    "GOOGLE_CLIENT_ID": "649384260817-bb1kj82kblqg9ldrd8njk1klli2c7j1t.apps.googleusercontent.com",
+    "SPOTIFY_CLIENT_ID": "389bac096d4e4f8ba4c00ceab154e64c"
+  },
 
   "env": {
     "staging": {
@@ -35,7 +41,10 @@
         { "binding": "DB", "database_name": "sightread-staging", "database_id": "3367c1c7-f6c4-459b-b9c4-c92f99fd4a9a", "migrations_dir": "migrations" }
       ],
       "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-staging" }],
-      "vars": { "GOOGLE_CLIENT_ID": "649384260817-97hc0jhbdh2fut25n05ccbgdgvijavnd.apps.googleusercontent.com" }
+      "vars": {
+        "GOOGLE_CLIENT_ID": "649384260817-97hc0jhbdh2fut25n05ccbgdgvijavnd.apps.googleusercontent.com",
+        "SPOTIFY_CLIENT_ID": "389bac096d4e4f8ba4c00ceab154e64c"
+      }
     },
     "production": {
       "name": "sightread-production",
@@ -48,7 +57,10 @@
         { "binding": "DB", "database_name": "sightread-production", "database_id": "979aee2c-54cb-4750-84b5-a4eb92667c54", "migrations_dir": "migrations" }
       ],
       "r2_buckets": [{ "binding": "PDFS", "bucket_name": "sightread-pdfs-production" }],
-      "vars": { "GOOGLE_CLIENT_ID": "649384260817-j583ee2gotlp9j0m9v8tt3d7b994sg1h.apps.googleusercontent.com" },
+      "vars": {
+        "GOOGLE_CLIENT_ID": "649384260817-j583ee2gotlp9j0m9v8tt3d7b994sg1h.apps.googleusercontent.com",
+        "SPOTIFY_CLIENT_ID": "389bac096d4e4f8ba4c00ceab154e64c"
+      },
       "routes": [{ "pattern": "sightread.ing", "custom_domain": true }]
     }
   }
