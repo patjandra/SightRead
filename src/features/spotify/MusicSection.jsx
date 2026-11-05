@@ -83,7 +83,37 @@ export default function MusicSection() {
 
   return (
     <section className="space-y-1.5" data-no-scroll-pause>
-      <SectionToggle open={open} onToggle={toggle}>Music</SectionToggle>
+      <div className="flex items-center gap-2">
+        <SectionToggle open={open} onToggle={toggle} className="shrink-0">Music</SectionToggle>
+        {/* Collapsed with a song loaded: keep play/pause and a slim progress bar in reach. */}
+        {!open && signedIn && player.track && (
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <button
+              className="shrink-0 w-5 h-5 rounded-full bg-slate-600 hover:bg-slate-500 flex items-center justify-center"
+              onClick={player.toggle}
+              aria-label={player.paused ? "Play" : "Pause"}
+              title={`${player.track.name} — ${player.track.artists}`}
+            >
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                {player.paused ? <path d="M8 5v14l11-7z" /> : <path d="M7 5h4v14H7zM13 5h4v14h-4z" />}
+              </svg>
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={player.durationMs || 1}
+              step={1000}
+              value={Math.min(shownMs, player.durationMs || 1)}
+              onChange={(e) => setScrubMs(Number(e.target.value))}
+              onPointerUp={commitScrub}
+              onKeyUp={commitScrub}
+              onBlur={commitScrub}
+              aria-label="Song progress (mini)"
+              className="block h-1 flex-1 min-w-0 accent-green-500"
+            />
+          </div>
+        )}
+      </div>
       {open && (
         <div className="space-y-2">
           {!SPOTIFY_CLIENT_ID ? (

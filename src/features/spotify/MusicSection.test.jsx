@@ -71,4 +71,27 @@ describe("MusicSection", () => {
     render(<MusicSection />);
     expect(screen.getByText(/Premium is required/)).toBeTruthy();
   });
+
+  it("keeps play/pause and a mini progress bar in the header when collapsed", () => {
+    localStorage.setItem("sightread-sections", JSON.stringify({ music: false }));
+    Object.assign(auth, { status: "signed-in", accessToken: "tok" });
+    Object.assign(player, { track: { uri: "u", name: "Now", artists: "Artist" }, paused: true });
+    render(<MusicSection />);
+    expect(screen.queryByLabelText("Search Spotify")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Play"));
+    expect(player.toggle).toHaveBeenCalled();
+    const mini = screen.getByLabelText("Song progress (mini)");
+    fireEvent.change(mini, { target: { value: "60000" } });
+    fireEvent.pointerUp(mini);
+    expect(player.seek).toHaveBeenCalledWith(60000);
+    localStorage.clear();
+  });
+
+  it("shows no mini controls when collapsed without a song", () => {
+    localStorage.setItem("sightread-sections", JSON.stringify({ music: false }));
+    Object.assign(auth, { status: "signed-in", accessToken: "tok" });
+    render(<MusicSection />);
+    expect(screen.queryByLabelText("Song progress (mini)")).toBeNull();
+    localStorage.clear();
+  });
 });
