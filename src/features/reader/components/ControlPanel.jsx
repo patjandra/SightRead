@@ -112,7 +112,6 @@ export default function ControlPanel({
   const [profileOpen, toggleProfile] = useSectionOpen("profile");
   const [faceOpen, toggleFace] = useSectionOpen("face");
   const [gazeOpen, toggleGaze] = useSectionOpen("gaze");
-  const [sensitivityOpen, toggleSensitivity] = useSectionOpen("sensitivity");
 
   // Shortcut capture: the next key press becomes the start/stop shortcut.
   const [capturing, setCapturing] = useState(false);
@@ -407,31 +406,21 @@ export default function ControlPanel({
       </section>
 
       {/* Sensitivity */}
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <SectionToggle open={sensitivityOpen} onToggle={toggleSensitivity}>Sensitivity</SectionToggle>
-          <span className="text-xs font-mono text-slate-300 tabular-nums">
-            {sensitivity.toFixed(2)}
-          </span>
-        </div>
-        {sensitivityOpen && (
-          <>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={sensitivityToSlider(sensitivity)}
-            onChange={(e) => onSensitivityChange(sliderToSensitivity(parseFloat(e.target.value)))}
-            className="block w-full accent-indigo-500 cursor-pointer"
-          />
-          <div className="flex justify-between text-[10px] text-slate-100 !mt-0.5 leading-none">
-            <span>0.10</span>
-            <span>0.40</span>
-            <span>1.60</span>
-          </div>
-          </>
-        )}
+      <section className="flex items-center gap-2">
+        <SectionLabel className="shrink-0">Sensitivity</SectionLabel>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={sensitivityToSlider(sensitivity)}
+          onChange={(e) => onSensitivityChange(sliderToSensitivity(parseFloat(e.target.value)))}
+          aria-label="Sensitivity"
+          className="block flex-1 min-w-0 accent-indigo-500 cursor-pointer"
+        />
+        <span className="shrink-0 w-8 text-right text-xs font-mono text-slate-300 tabular-nums">
+          {sensitivity.toFixed(2)}
+        </span>
       </section>
 
       {/* Music — Spotify search and playback */}
