@@ -12,6 +12,8 @@ import ControlPanel from "./components/ControlPanel.jsx";
 import TrackingWarning from "./components/TrackingWarning.jsx";
 import TrackingAura from "./components/TrackingAura.jsx";
 import { useSmoothedQuality } from "./hooks/useSmoothedQuality.js";
+import { useAutoRecenter } from "./hooks/useAutoRecenter.js";
+import { useAutoRecenterPref } from "./hooks/useAutoRecenterPref.js";
 import { scrollScaleForQuality } from "./gaze/trackingQuality.js";
 import TrackingPausedNotice from "./components/TrackingPausedNotice.jsx";
 import { useManualScrollPause } from "./hooks/useManualScrollPause.js";
@@ -76,6 +78,7 @@ export default function ReaderPage() {
     selectProfile,
     addProfile,
     updateSelectedProfile,
+    renameProfile,
     removeProfile,
     syncStatus,
     pendingCount,
@@ -269,11 +272,27 @@ export default function ReaderPage() {
   // preview whenever the camera is on, and around the window while tracking.
   const smoothedQuality = useSmoothedQuality(gazeData, cameraShouldBeOn, sweetSpot);
 
+  // ── Automatic recentering ────────────────────────────────────────────────
+  // Follows drift while tracking (after Start tracking and after the head
+  // settles in a new pose), with no pop-up. Added on top of the manual Recenter.
+  // Pausing tracking keeps the correction for this page visit.
+  const [autoRecenter, setAutoRecenter] = useAutoRecenterPref();
+  const autoOffset = useAutoRecenter({
+    gazeData,
+    profile: selectedProfile,
+    manualOffset: recenterOffset,
+    score: smoothedQuality?.score,
+    enabled: autoRecenter && isProfileCalibrated(selectedProfile),
+    active: isTracking,
+    resetKey: `${selectedId}|${recenterOffset}|${JSON.stringify(selectedProfile?.points ?? null)}`,
+  });
+  const totalOffset = recenterOffset + autoOffset;
+
   useScrollControl({
     gazeData,
     selectedProfile,
     isTracking,
-    offset: recenterOffset,
+    offset: totalOffset,
     zoom,
     speedScale: scrollScaleForQuality(smoothedQuality?.score),
     sensitivity,
@@ -376,7 +395,7 @@ export default function ReaderPage() {
   const debugCalibratedY = !isProfileCalibrated(selectedProfile)
     ? null
     : confidentGaze
-    ? mapRawToCalibratedY(gazeData.rawY, selectedProfile, recenterOffset)
+    ? mapRawToCalibratedY(gazeData.rawY, selectedProfile, totalOffset)
     : 0.5;
 
   return (
@@ -458,6 +477,7 @@ export default function ReaderPage() {
           selectedProfile={selectedProfile}
           onSelectProfile={selectProfile}
           onDeleteProfile={removeProfile}
+          onRenameProfile={renameProfile}
           onCreateProfile={handleCreateProfile}
           syncStatus={syncStatus}
           pendingCount={pendingCount}
@@ -468,6 +488,9 @@ export default function ReaderPage() {
           onRecenter={handleStartRecenter}
           onResetRecenter={() => setRecenterOffset(0)}
           recentered={recenterOffset !== 0}
+          autoRecenter={autoRecenter}
+          onAutoRecenterChange={setAutoRecenter}
+          debugAuto={isTracking && autoRecenter ? autoOffset : null}
           isTracking={isTracking}
           onToggleTracking={handleToggleTracking}
           trackingKey={trackingKey}

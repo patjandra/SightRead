@@ -272,6 +272,21 @@ export async function updateProfile(id, points) {
   return updated;
 }
 
+/** Rename a profile. Same bookkeeping as updateProfile so the rename syncs. */
+export async function renameProfile(id, name) {
+  const existing = await getProfile(id);
+  const trimmed = name.trim();
+  if (!existing || !trimmed) return existing;
+  const updated = {
+    ...existing,
+    name: trimmed,
+    updatedAt: new Date().toISOString(),
+    syncState: existing.ownerId ? "pending" : "local",
+  };
+  await putRecord(updated);
+  return updated;
+}
+
 /**
  * Delete a profile. Guest-local profiles are removed outright. Account
  * profiles become tombstones until the server confirms the delete, so other

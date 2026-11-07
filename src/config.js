@@ -24,6 +24,10 @@ export const CALIBRATION_VERSION = 7;
 // threshold) to make scrolling up as easy to trigger as scrolling down.
 export const SCROLL_UP_THRESHOLD = 0.47;   // calibratedY below this → scroll up
 export const SCROLL_DOWN_THRESHOLD = 0.62; // calibratedY above this → scroll down
+// Middle of the no-scroll band. Recenter aims the user's gaze here rather than at
+// the calibrated 0.5, which sits only 0.03 from the up edge and 0.12 from the
+// down edge and so tipped a resting gaze into scrolling up.
+export const SCROLL_BAND_CENTER = (SCROLL_UP_THRESHOLD + SCROLL_DOWN_THRESHOLD) / 2; // 0.545
 
 /**
  * Scroll zones for a given page zoom. The dead zone around the reading band is
@@ -38,7 +42,7 @@ export const SCROLL_DOWN_THRESHOLD = 0.62; // calibratedY above this → scroll 
  * @returns {{ up: number, down: number }}
  */
 export function scrollZones(zoom = 1) {
-  const center = (SCROLL_UP_THRESHOLD + SCROLL_DOWN_THRESHOLD) / 2;
+  const center = SCROLL_BAND_CENTER;
   const half = (SCROLL_DOWN_THRESHOLD - SCROLL_UP_THRESHOLD) / 2;
   const scaled = Math.min(0.2, Math.max(half, half * zoom));
   return { up: center - scaled, down: center + scaled };
@@ -59,3 +63,39 @@ export const GAP_HOLD_MS = 250;
 // that Spotify isn't configured.
 export const SPOTIFY_CLIENT_ID =
   import.meta.env?.VITE_SPOTIFY_CLIENT_ID || "389bac096d4e4f8ba4c00ceab154e64c";
+
+// Automatic drift correction (see gaze/driftEstimator.js). When the head settles
+// in a new pose, the estimator compares where the gaze lands while reading now
+// against where it landed in the previous pose, and applies the difference as a
+// session-only offset. Reading habits cancel out of that comparison; they do not
+// cancel out of "the gaze should sit at the center", which is why it isn't used.
+// All values are starting points to tune by feel on a real camera; the `auto`
+// cell in the Gaze data readout shows the live correction.
+export const AUTO_RECENTER = {
+  // Only frames whose corrected position is inside this band count. It is wide on
+  // purpose (only the saturated ends are dropped): the same band applies before
+  // and after a move, so a reader's sweep appears in both and cancels.
+  captureWindow: [0.1, 0.9],
+  // Frames are ignored below this tracking-quality score (yellow and worse).
+  minQuality: 0.45,
+  // Right after Start tracking the gaze is still on the sidebar: ignore it.
+  graceMs: 2000,
+  // How much recent history forms the "before" picture, and how long to measure
+  // once the head has settled somewhere new.
+  baselineMs: 15000,
+  measureMs: 5000,
+  minSamples: 20,
+  // The head must hold still this long, at a pose this far from the last one, to
+  // count as a new orientation. Distance is in units of each face measurement's
+  // free range (1 = about the width of the default green zone).
+  poseHoldMs: 1500,
+  poseShift: 1,
+  poseUnit: { cx: 0.08, cy: 0.08, height: 0.15, yaw: 0.06 },
+  // Shifts smaller than this (fraction of the raw span bottom - top) are noise.
+  deadBand: 0.02,
+  // The correction is eased in at this many raw spans per second.
+  rate: 0.1,
+  // The total correction never exceeds this fraction of the raw span; past it a
+  // full recalibration is the right fix.
+  maxOffset: 0.12,
+};

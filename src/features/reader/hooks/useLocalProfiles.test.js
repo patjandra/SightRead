@@ -103,6 +103,18 @@ describe("signing in", () => {
     expect(api.pushProfile.mock.calls[1][0].points).toEqual(POINTS);
   });
 
+  it("pushes a rename of an account profile", async () => {
+    const { result } = mount(signedIn(ALICE));
+    await waitFor(() => expect(api.fetchProfiles).toHaveBeenCalled());
+    await act(() => result.current.addProfile("Piano", POINTS));
+    await waitFor(() => expect(api.pushProfile).toHaveBeenCalledTimes(1));
+
+    await act(() => result.current.renameProfile(result.current.profiles[0].id, "Desk"));
+    await waitFor(() => expect(api.pushProfile).toHaveBeenCalledTimes(2));
+    expect(api.pushProfile.mock.calls[1][0].name).toBe("Desk");
+    await waitFor(() => expect(result.current.profiles[0]).toMatchObject({ name: "Desk", syncState: "synced" }));
+  });
+
   it("sends deletes of account profiles and removes them", async () => {
     const { result } = mount(signedIn(ALICE));
     await waitFor(() => expect(api.fetchProfiles).toHaveBeenCalled());

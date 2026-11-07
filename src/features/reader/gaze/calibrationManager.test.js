@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   mapRawToCalibratedY,
+  calibratedToRaw,
   isProfileCalibrated,
   isCalibrationStale,
 } from "./calibrationManager.js";
@@ -133,5 +134,18 @@ describe("mapRawToCalibratedY offset", () => {
 
   it("is a no-op with no offset", () => {
     expect(mapRawToCalibratedY(0.35, profile, 0)).toBe(mapRawToCalibratedY(0.35, profile));
+  });
+});
+
+describe("calibratedToRaw", () => {
+  it("inverts mapRawToCalibratedY", () => {
+    for (const y of [0, 0.2, 0.5, 0.545, 0.8, 1]) {
+      expect(mapRawToCalibratedY(calibratedToRaw(y, { points }), { points })).toBeCloseTo(y, 6);
+    }
+  });
+
+  it("returns null without usable points", () => {
+    expect(calibratedToRaw(0.5, null)).toBeNull();
+    expect(calibratedToRaw(0.5, { points: { top: 0.2, center: NaN, bottom: 0.9 } })).toBeNull();
   });
 });
