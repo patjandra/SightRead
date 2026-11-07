@@ -36,6 +36,7 @@
     "concurrently": "^10.0.6",
     "fake-indexeddb": "^6.2.7",
     "jsdom": "^29.1.1",
+    "jsonc-parser": "^3.3.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "vite": "^5.4.8",

@@ -1,14 +1,77 @@
 name: CI
 
-# Build and test on every push to the main branches and on every PR.
+# Every PR and every push to the main branches is built and tested. A push to the
+# integration branch that passes also deploys to STAGING. Production is never
+# deployed from here: it stays a manual `npm run deploy:production`.
 on:
   push:
-    branches: [main, vibeWeb, login-page]
+    branches: [main, vibeWeb]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    # A newer push to the same branch or PR makes the older run pointless.
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node version comes from .nvmrc. The worker tests use node:sqlite, which
+      # needs Node 22.13 or newer.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Reproducible install from the committed lockfile.
+      - name: Install dependencies
+        run: npm ci
+
+      # Known high-severity advisories in what actually ships.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # Gaze / calibration / scroll logic, the Worker API, and the checks that
+      # migrations apply cleanly and wrangler.jsonc is complete and consistent.
+      - name: Run tests
+        run: npm test
+
+      # Ensure the production bundle still compiles.
+      - name: Build
+        run: npm run build
+
+      # Bundle the Worker against the built assets with each environment's
+      # config. Needs no Cloudflare login; it catches an invalid config or a
+      # Worker that no longer bundles before anyone tries to deploy it.
+      - name: Worker dry run (staging)
+        run: npx wrangler deploy --dry-run --env staging --outdir "$RUNNER_TEMP/dry-staging"
+
+      - name: Worker dry run (production)
+        run: npx wrangler deploy --dry-run --env production --outdir "$RUNNER_TEMP/dry-production"
+
+  deploy-staging:
+    needs: build-and-test
+    # Only pushes to the integration branch, never pull requests, so PR code and
+    # forks can't reach the Cloudflare credentials.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/vibeWeb'
+    runs-on: ubuntu-latest
+    # Credentials live in the "staging" environment (Settings > Environments).
+    environment: staging
+    # Deploys queue instead of racing, and a running deploy is never cancelled.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
     steps:
       - name: Checkout
@@ -17,17 +80,18 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
-      # Reproducible install from the committed lockfile.
       - name: Install dependencies
         run: npm ci
 
-      # Unit tests for the gaze / calibration / scroll logic (Vitest).
-      - name: Run tests
-        run: npm test
+      # Schema first, so the new code never runs against an old database.
+      # Migrations are additive; already-applied ones are skipped.
+      - name: Apply migrations to staging
+        run: npm run db:migrate:staging
 
-      # Ensure the production bundle still compiles.
-      - name: Build
-        run: npm run build
+      # Builds, then deploys the Worker and static assets. Worker secrets
+      # (SESSION_SECRET, SPOTIFY_TOKEN_KEY) stay in Cloudflare and are untouched.
+      - name: Deploy to staging
+        run: npm run deploy:staging
