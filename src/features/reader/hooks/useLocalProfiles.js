@@ -218,6 +218,16 @@ export function useLocalProfiles({
     [selectedId, reload, pushSoon]
   );
 
+  const renameProfile = useCallback(
+    async (id, name) => {
+      const profile = await store.renameProfile(id, name);
+      await reload();
+      if (profile?.ownerId) pushSoon(profile, profile.ownerId);
+      return profile;
+    },
+    [reload, pushSoon]
+  );
+
   const removeProfile = useCallback(
     async (id) => {
       const before = await store.getRecord(id);
@@ -275,6 +285,7 @@ export function useLocalProfiles({
     selectProfile,
     addProfile,
     updateSelectedProfile,
+    renameProfile,
     removeProfile,
     saveToAccount,
     confirmUploadOffer,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scrollZones, SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD } from "./config.js";
+import { scrollZones, SCROLL_UP_THRESHOLD, SCROLL_DOWN_THRESHOLD, SCROLL_BAND_CENTER } from "./config.js";
 
 describe("scrollZones", () => {
   it("matches the base thresholds at 100% zoom", () => {
@@ -26,5 +26,11 @@ describe("scrollZones", () => {
   it("caps the widening so the dead zone never takes over the screen", () => {
     const huge = scrollZones(50);
     expect(huge.down - huge.up).toBeCloseTo(0.4);
+  });
+});
+
+describe("SCROLL_BAND_CENTER", () => {
+  it("is equally far from both scroll thresholds", () => {
+    expect(SCROLL_BAND_CENTER - SCROLL_UP_THRESHOLD).toBeCloseTo(SCROLL_DOWN_THRESHOLD - SCROLL_BAND_CENTER);
   });
 });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { isUsableSample } from "../gaze/calibrationManager.js";
+import { calibratedToRaw, isUsableSample } from "../gaze/calibrationManager.js";
+import { SCROLL_BAND_CENTER } from "../../../config.js";
 import { trimmedMedian } from "../gaze/stats.js";
 
 const LEAD_MS = 800;       // a beat to find the dot before sampling starts
@@ -9,7 +10,9 @@ const MIN_SAMPLES = 12;
 
 /**
  * One-dot realignment: the user looks at the middle of the screen and the gap
- * between that reading and the profile's saved center becomes a session offset.
+ * between that reading and the middle of the no-scroll band becomes a session
+ * offset, so a resting gaze sits equally far from the scroll-up and scroll-down
+ * edges.
  * Calls onDone(offset) on success or onDone(null) when cancelled.
  */
 export default function RecenterScreen({ gazeData, profile, onDone }) {
@@ -40,7 +43,7 @@ export default function RecenterScreen({ gazeData, profile, onDone }) {
     }
     const n = samplesRef.current.length;
     if (n >= TARGET_SAMPLES || (elapsed >= MAX_MS && n >= MIN_SAMPLES)) {
-      onDone(trimmedMedian(samplesRef.current) - profile.points.center);
+      onDone(trimmedMedian(samplesRef.current) - calibratedToRaw(SCROLL_BAND_CENTER, profile));
     } else if (elapsed >= MAX_MS) {
       setPhase("failed");
     }

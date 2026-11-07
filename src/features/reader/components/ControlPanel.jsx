@@ -70,6 +70,7 @@ export default function ControlPanel({
   selectedProfile,
   onSelectProfile,
   onDeleteProfile,
+  onRenameProfile,
   onCreateProfile,
   syncStatus,
   pendingCount,
@@ -81,6 +82,8 @@ export default function ControlPanel({
   onRecenter,
   onResetRecenter,
   recentered,
+  autoRecenter,
+  onAutoRecenterChange,
   // Tracking
   isTracking,
   onToggleTracking,
@@ -100,6 +103,7 @@ export default function ControlPanel({
   debugCalibratedY,
   debugEye,
   debugHead,
+  debugAuto,
   // Mediapipe
   mediapipeReady,
   mediapipeError,
@@ -299,6 +303,7 @@ export default function ControlPanel({
             selectedId={selectedId}
             onSelect={onSelectProfile}
             onDelete={onDeleteProfile}
+            onRename={onRenameProfile}
             onCreate={onCreateProfile}
             syncStatus={syncStatus}
             onSaveToAccount={onSaveProfileToAccount}
@@ -323,13 +328,27 @@ export default function ControlPanel({
         {/* Recenter: fix drift without a full recalibration */}
         {profileOpen && selectedProfile && isProfileCalibrated(selectedProfile) && (
           <div>
-            <button
-              className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
-              onClick={onRecenter}
-              disabled={!mediapipeReady || isCalibrating}
-            >
-              Recenter
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50"
+                onClick={onRecenter}
+                disabled={!mediapipeReady || isCalibrating}
+              >
+                Recenter
+              </button>
+              <label
+                className="flex items-center gap-1 text-[10px] text-slate-300 cursor-pointer select-none"
+                title="Keeps the gaze aligned while you read, with no pop-up"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!autoRecenter}
+                  onChange={(e) => onAutoRecenterChange?.(e.target.checked)}
+                  className="accent-indigo-500"
+                />
+                Auto
+              </label>
+            </div>
             {recentered && (
               <p className="text-xs text-slate-500 mt-1.5">
                 Recentered for this session.{" "}
@@ -499,6 +518,13 @@ export default function ControlPanel({
             <div className="text-slate-500">head</div>
             <div className="text-slate-200 tabular-nums">
               {debugHead != null ? debugHead.toFixed(3) : "—"}
+            </div>
+          </div>
+          {/* Live automatic recenter correction (raw units) */}
+          <div>
+            <div className="text-slate-500">auto</div>
+            <div className="text-slate-200 tabular-nums">
+              {debugAuto != null ? debugAuto.toFixed(3) : "—"}
             </div>
           </div>
         </div>}

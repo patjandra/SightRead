@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 
+// Matches the server's profile name limit (worker/services/calibrations.js).
+const MAX_NAME_LENGTH = 100;
+
 /**
  * Dropdown profile picker with inline "create new" form.
  *
@@ -8,6 +11,7 @@ import React, { useState, useRef, useEffect } from "react";
  *   selectedId  - currently active profile id or null
  *   onSelect    - (id) => void
  *   onDelete    - (id) => void
+ *   onRename    - (id, name) => void  — trimmed, non-empty, changed names only
  *   onCreate    - (name) => void  — called only after uniqueness check passes
  *   syncStatus  - "idle" | "syncing" | "error" (account sync, if signed in)
  *   onSaveToAccount - (id) => void  — guest-local profile's "save to account"
@@ -77,6 +81,7 @@ export default function ProfileSelector({
   selectedId,
   onSelect,
   onDelete,
+  onRename,
   onCreate,
   syncStatus = "idle",
   onSaveToAccount,
@@ -86,6 +91,9 @@ export default function ProfileSelector({
   const [newName, setNewName] = useState("");
   const [nameError, setNameError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState("");
+  const editDoneRef = useRef(false);
   const containerRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -138,6 +146,23 @@ export default function ProfileSelector({
     } else {
       setConfirmDelete(id);
     }
+  }
+
+  function startRename(p, e) {
+    e.stopPropagation();
+    editDoneRef.current = false;
+    setConfirmDelete(null);
+    setDraft(p.name);
+    setEditingId(p.id);
+  }
+
+  // Enter and blur both land here; the ref keeps the second one from re-saving.
+  function finishRename(p, save) {
+    if (editDoneRef.current) return;
+    editDoneRef.current = true;
+    setEditingId(null);
+    const trimmed = draft.trim();
+    if (save && trimmed && trimmed !== p.name) onRename?.(p.id, trimmed);
   }
 
   function handleSelect(id) {
@@ -197,7 +222,48 @@ export default function ProfileSelector({
                     }`}
                     title={p.points ? "Calibrated" : "Not calibrated"}
                   />
-                  <span className="flex-1 truncate">{p.name}</span>
+                  {editingId === p.id ? (
+                    <input
+                      autoFocus
+                      className="flex-1 min-w-0 bg-slate-900 text-slate-100 border border-slate-600 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:border-indigo-500"
+                      value={draft}
+                      maxLength={MAX_NAME_LENGTH}
+                      aria-label={`New name for ${p.name}`}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={() => finishRename(p, true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") finishRename(p, true);
+                        else if (e.key === "Escape") {
+                          e.stopPropagation();
+                          finishRename(p, false);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <span className="flex-1 truncate">{p.name}</span>
+                      <button
+                        className={`flex-shrink-0 ${
+                          p.id === selectedId
+                            ? "text-indigo-200 hover:text-white"
+                            : "text-slate-500 hover:text-slate-200"
+                        }`}
+                        onClick={(e) => startRename(p, e)}
+                        title="Rename profile"
+                        aria-label={`Rename ${p.name}`}
+                      >
+                        <svg
+                          viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                        >
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
                   <SyncControl
                     profile={p}
                     selected={p.id === selectedId}

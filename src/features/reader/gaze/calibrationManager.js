@@ -87,6 +87,23 @@ export function mapRawToCalibratedY(rawY, profile, offset = 0) {
   return Math.min(1, Math.max(0, calibrated));
 }
 
+/**
+ * Inverse of mapRawToCalibratedY (no offset): the raw signal that maps to a
+ * calibrated position. Recenter uses it to find where the middle of the no-scroll
+ * band sits in the raw signal.
+ *
+ * @param {number} y - calibrated position in [0, 1]
+ * @param {{ points: { top: number, center: number, bottom: number } }} profile
+ * @returns {number|null}
+ */
+export function calibratedToRaw(y, profile) {
+  if (!profile || !profile.points) return null;
+  const { top, center, bottom } = profile.points;
+  if (![top, center, bottom].every((n) => typeof n === "number" && isFinite(n))) return null;
+  const c = Math.min(1, Math.max(0, y));
+  return c <= 0.5 ? top + (c / 0.5) * (center - top) : center + ((c - 0.5) / 0.5) * (bottom - center);
+}
+
 // ─── Calibration capture ───────────────────────────────────────────────────────
 
 // Frames in the first stretch after the dot lights up are discarded: the eyes are

@@ -14,7 +14,7 @@ const profile = (id, syncState, over = {}) => ({
 
 function setup(profiles, props = {}) {
   const handlers = {
-    onSelect: vi.fn(), onDelete: vi.fn(), onCreate: vi.fn(),
+    onSelect: vi.fn(), onDelete: vi.fn(), onCreate: vi.fn(), onRename: vi.fn(),
     onSaveToAccount: vi.fn(), onRetrySync: vi.fn(),
   };
   render(<ProfileSelector profiles={profiles} selectedId={null} {...handlers} {...props} />);
@@ -52,5 +52,65 @@ describe("sync control", () => {
     setup([profile("a", "synced"), profile("b", "local")]);
     expect(screen.getByTitle("Delete profile (also removes it from your account)")).toBeInTheDocument();
     expect(screen.getByTitle("Delete profile")).toBeInTheDocument();
+  });
+});
+
+describe("rename", () => {
+  const edit = () => {
+    fireEvent.click(screen.getByLabelText("Rename desk"));
+    return screen.getByLabelText("New name for desk");
+  };
+
+  it("turns the name into a focused, prefilled input without selecting the profile", () => {
+    const h = setup([profile("desk", "local")]);
+    const input = edit();
+    expect(input).toHaveValue("desk");
+    expect(input).toHaveFocus();
+    expect(h.onSelect).not.toHaveBeenCalled();
+    fireEvent.click(input);
+    expect(h.onSelect).not.toHaveBeenCalled();
+  });
+
+  it("saves the trimmed name on Enter", () => {
+    const h = setup([profile("desk", "local")]);
+    const input = edit();
+    fireEvent.change(input, { target: { value: "  Piano  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(h.onRename).toHaveBeenCalledTimes(1);
+    expect(h.onRename).toHaveBeenCalledWith("desk", "Piano");
+    expect(screen.queryByLabelText("New name for desk")).not.toBeInTheDocument();
+  });
+
+  it("saves on blur", () => {
+    const h = setup([profile("desk", "local")]);
+    const input = edit();
+    fireEvent.change(input, { target: { value: "Piano" } });
+    fireEvent.blur(input);
+    expect(h.onRename).toHaveBeenCalledWith("desk", "Piano");
+  });
+
+  it("cancels on Escape, even though the input then blurs", () => {
+    const h = setup([profile("desk", "local")]);
+    const input = edit();
+    fireEvent.change(input, { target: { value: "Piano" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input);
+    expect(h.onRename).not.toHaveBeenCalled();
+    expect(screen.getByText("desk")).toBeInTheDocument();
+  });
+
+  it("ignores empty and unchanged names", () => {
+    const h = setup([profile("desk", "local")]);
+    fireEvent.change(edit(), { target: { value: "   " } });
+    fireEvent.keyDown(screen.getByLabelText("New name for desk"), { key: "Enter" });
+    edit();
+    fireEvent.keyDown(screen.getByLabelText("New name for desk"), { key: "Enter" });
+    expect(h.onRename).not.toHaveBeenCalled();
+    expect(screen.getByText("desk")).toBeInTheDocument();
+  });
+
+  it("caps the input at the server's name limit", () => {
+    setup([profile("desk", "local")]);
+    expect(edit()).toHaveAttribute("maxLength", "100");
   });
 });

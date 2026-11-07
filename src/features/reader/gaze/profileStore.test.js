@@ -94,6 +94,28 @@ describe("updateProfile", () => {
   });
 });
 
+describe("renameProfile", () => {
+  it("trims, bumps updatedAt and keeps a guest profile local", async () => {
+    const p = await store.createProfile("Desk", POINTS);
+    await new Promise((r) => setTimeout(r, 5));
+    const r = await store.renameProfile(p.id, "  Piano ");
+    expect(r).toMatchObject({ name: "Piano", points: POINTS, syncState: "local" });
+    expect(r.updatedAt > p.updatedAt).toBe(true);
+  });
+
+  it("marks an account profile pending", async () => {
+    const p = await store.createProfile("Desk", POINTS, { ownerId: "user-1" });
+    await store.putRecord({ ...p, syncState: "synced" });
+    expect((await store.renameProfile(p.id, "Piano")).syncState).toBe("pending");
+  });
+
+  it("ignores empty names and unknown ids", async () => {
+    const p = await store.createProfile("Desk", null);
+    expect((await store.renameProfile(p.id, "  ")).name).toBe("Desk");
+    expect(await store.renameProfile("nope", "X")).toBeUndefined();
+  });
+});
+
 describe("deleteProfile", () => {
   it("removes a guest-local profile outright", async () => {
     const p = await store.createProfile("Desk", null);
