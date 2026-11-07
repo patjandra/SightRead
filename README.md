@@ -42,7 +42,7 @@ See the in-app Privacy and Terms pages (`/privacy`, `/terms`).
 | Database | Cloudflare D1 (SQLite) |
 | File storage | Cloudflare R2 |
 | Offline | Service worker (`public/sw.js`) |
-| Tests / CI | Vitest, Testing Library, GitHub Actions (Node 22) |
+| Tests / CI | Vitest, Testing Library, GitHub Actions (Node 22, see `.nvmrc`) |
 
 ## Architecture
 
@@ -134,6 +134,26 @@ npm run deploy:production
 
 `ALLOWED_ORIGINS` and `INSECURE_DEV_COOKIES` should be unset in staging and production.
 
+### CI/CD
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main` and `vibeWeb`:
+
+1. `npm ci`, then `npm audit --omit=dev --audit-level=high`
+2. `npm test`: unit and API tests, plus checks that the migrations apply in order to a fresh database and that `wrangler.jsonc` is complete for every environment (including that the Spotify client ID matches `src/config.js`)
+3. `npm run build`
+4. `wrangler deploy --dry-run` for staging and production (bundles the Worker with each environment's config; needs no Cloudflare login)
+
+A push to **`vibeWeb`** that passes also **deploys to staging**: it applies the migrations (`db:migrate:staging`), then runs `deploy:staging`. Pull requests never deploy. Worker secrets stay in Cloudflare and are not touched.
+
+**Production is deployed by hand**, after checking staging:
+
+```bash
+npm run db:migrate:production   # only when there are new migrations
+npm run deploy:production
+```
+
+One-time setup for the staging deploy: create a Cloudflare API token for this account with Workers Scripts: Edit, D1: Edit and Workers R2 Storage: Edit, then add it as `CLOUDFLARE_API_TOKEN`, together with `CLOUDFLARE_ACCOUNT_ID`, as secrets of a GitHub environment named `staging` (Settings, Environments). Until they exist the staging deploy job fails; pull request checks are unaffected.
+
 ## Project structure
 
 ```
@@ -150,14 +170,14 @@ src/
 worker/
   index.js                         Hono app
   routes/, services/, middleware/  API handlers, D1/R2/session logic, CSRF and auth
-migrations/                        D1 schema (users, calibration profiles, PDFs, PDF hash)
+migrations/                        D1 schema (users, calibration profiles, PDFs, PDF hash, Spotify links)
 public/
   sw.js                            service worker
   mediapipe-models/, mediapipe-wasm/
 wrangler.jsonc                     Worker, assets, D1, R2, environments
-.github/workflows/ci.yml           install, test, build
+.github/workflows/ci.yml           audit, test, build, Worker dry run; staging deploy
 ```
 
 ## Contributing
 
-Run `npm test` and `npm run build` before opening a pull request; CI runs the same two steps.
+Run `npm test` and `npm run build` before opening a pull request; CI runs both, plus a dependency audit and a Worker dry run.
